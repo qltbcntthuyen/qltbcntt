@@ -21,6 +21,7 @@ export const NAV_ITEMS = [
   { href: "/dashboard/chung-thu-so", label: "Chứng thư số", icon: BadgeCheck },
   { href: "/dashboard/bao-cao", label: "Báo cáo", icon: ClipboardList },
   { href: "/dashboard/nhan-su", label: "Nhân sự", icon: UsersRound },
+  { href: "/dashboard/phong-ban", label: "Phòng ban", icon: Building2 },
   { href: "/dashboard/ban-giao", label: "Bàn giao", icon: Boxes },
   { href: "/dashboard/bao-tri", label: "Bảo trì", icon: Wrench },
   { href: "/dashboard/danh-muc", label: "Danh mục", icon: LibraryBig },
@@ -35,7 +36,7 @@ export const ROLE_LABELS: Record<string, string> = {
 export const CERTIFICATE_STATUS_LABELS: Record<string, string> = {
   dang_hieu_luc: "Đang hiệu lực",
   sap_het_han: "Sắp hết hạn",
-  het_han_cho_gia_han: "Hết hạn chờ gia hạn",
+  het_han_cho_gia_han: "Cần gia hạn",
   can_thu_hoi: "Cần thu hồi",
   da_thu_hoi: "Đã thu hồi",
 };
@@ -44,18 +45,12 @@ export const CERTIFICATE_STATUS_OPTIONS = [
   { value: "all", label: "Tất cả" },
   { value: "dang_hieu_luc", label: "Đang hiệu lực" },
   { value: "sap_het_han", label: "Sắp hết hạn" },
-  { value: "het_han_cho_gia_han", label: "Hết hạn chờ gia hạn" },
+  { value: "het_han_cho_gia_han", label: "Cần gia hạn" },
   { value: "can_thu_hoi", label: "Cần thu hồi" },
   { value: "da_thu_hoi", label: "Đã thu hồi" },
 ];
 
 export const CATALOG_OPTIONS = [
-  {
-    value: "phong_ban",
-    label: "Phòng ban",
-    description: "Cơ cấu phòng, ban trong cơ quan",
-    icon: Building2,
-  },
   {
     value: "loai_thiet_bi",
     label: "Loại thiết bị",
@@ -94,5 +89,4 @@ export const CATALOG_OPTIONS = [
   },
 ] as const;
 
-export type CatalogKind = (typeof CATALOG_OPTIONS)[number]["value"];
-
+export type CatalogKind = "phong_ban" | (typeof CATALOG_OPTIONS)[number]["value"];

@@ -257,6 +257,7 @@ export type Database = {
           so_hieu_chung_thu_so: string;
           ngay_hieu_luc: string;
           ngay_het_hieu_luc: string;
+          han_gia_han_lan_dau: string | null;
           thoi_diem_gia_han_gan_nhat: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat: string | null;
           thoi_diem_thu_hoi: string | null;
@@ -271,6 +272,7 @@ export type Database = {
           so_hieu_chung_thu_so: string;
           ngay_hieu_luc: string;
           ngay_het_hieu_luc: string;
+          han_gia_han_lan_dau?: string | null;
           thoi_diem_gia_han_gan_nhat?: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat?: string | null;
           thoi_diem_thu_hoi?: string | null;
@@ -330,6 +332,7 @@ export type Database = {
           so_hieu_chung_thu_so: string | null;
           ngay_hieu_luc: string | null;
           ngay_het_hieu_luc: string | null;
+          han_gia_han_lan_dau: string | null;
           thoi_diem_gia_han_gan_nhat: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat: string | null;
           thoi_diem_thu_hoi: string | null;

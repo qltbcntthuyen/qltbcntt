@@ -5,7 +5,7 @@ import { getCatalog } from "@/lib/data";
 
 function normalizeKind(value?: string): CatalogKind {
   const found = CATALOG_OPTIONS.find((option) => option.value === value);
-  return found?.value ?? "phong_ban";
+  return found?.value ?? "loai_thiet_bi";
 }
 
 export default async function CatalogPage({
@@ -19,10 +19,7 @@ export default async function CatalogPage({
 
   return (
     <>
-      <PageHeader
-        title="Danh mục"
-        description="Quản lý dữ liệu nền dùng trong thiết bị, cấu hình máy tính, phòng ban và báo cáo."
-      />
+      <PageHeader title="Danh mục" />
       <CatalogClient kind={kind} rows={rows} />
     </>
   );

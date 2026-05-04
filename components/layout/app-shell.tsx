@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
-import { NAV_ITEMS, ROLE_LABELS } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { AdminProfile } from "@/lib/auth";
 
@@ -88,18 +88,12 @@ export function AppShell({
               <p className="font-heading text-sm font-semibold text-slate-950">
                 Hệ thống quản lý trang thiết bị CNTT
               </p>
-              <p className="hidden text-xs text-slate-500 sm:block">
-                Quản lý thiết bị, chứng thư số, bàn giao, bảo trì và báo cáo
-              </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-900">{profile.ho_ten}</p>
-              <p className="text-xs text-slate-500">
-                {ROLE_LABELS[profile.vai_tro] ?? profile.vai_tro}
-              </p>
             </div>
             <form action={signOutAction}>
               <Button type="submit" variant="outline" size="sm">
@@ -153,4 +147,3 @@ export function AppShell({
     </div>
   );
 }
-

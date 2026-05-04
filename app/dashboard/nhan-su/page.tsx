@@ -13,14 +13,12 @@ export default async function PersonnelPage({
     phongBan: params.phongBan,
     vaiTro: params.vaiTro,
     trangThai: params.trangThai,
+    taiKhoan: params.taiKhoan,
   });
 
   return (
     <>
-      <PageHeader
-        title="Nhân sự"
-        description="Quản lý hồ sơ cán bộ, công chức, viên chức để phân công thiết bị và cấp quyền quản trị hệ thống."
-      />
+      <PageHeader title="Nhân sự" />
       <PersonnelClient
         rows={rows}
         lookups={lookups}
@@ -29,6 +27,7 @@ export default async function PersonnelPage({
           phongBan: params.phongBan,
           vaiTro: params.vaiTro,
           trangThai: params.trangThai,
+          taiKhoan: params.taiKhoan,
         }}
       />
     </>

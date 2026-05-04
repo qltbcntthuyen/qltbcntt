@@ -46,18 +46,18 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="email">Email quản trị</Label>
+        <Label htmlFor="email">Tài khoản</Label>
         <div className="relative">
           <Mail className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <Input
             id="email"
             name="email"
-            type="email"
-            autoComplete="email"
+            type="text"
+            autoComplete="username"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="pl-9"
-            placeholder="ten.canbo@coquan.gov.vn"
+            placeholder="Tài khoản"
             required
           />
         </div>
@@ -81,7 +81,7 @@ export function LoginForm() {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 text-sm">
+      <div className="flex items-center gap-3 text-sm">
         <label className="flex items-center gap-2 text-slate-600">
           <input
             type="checkbox"
@@ -91,7 +91,6 @@ export function LoginForm() {
           />
           Ghi nhớ đăng nhập
         </label>
-        <span className="text-slate-500">Liên hệ IT khi quên mật khẩu</span>
       </div>
 
       {error ? (
@@ -106,4 +105,3 @@ export function LoginForm() {
     </form>
   );
 }
-

@@ -25,7 +25,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import type {
   Certificate,
   CertificateHistory,
@@ -67,7 +66,6 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
     man_hinh: detail.config?.man_hinh ?? "",
     he_dieu_hanh_id: detail.config?.he_dieu_hanh_id ?? "",
     phan_mem_diet_virus_id: detail.config?.phan_mem_diet_virus_id ?? "",
-    ghi_chu: detail.config?.ghi_chu ?? "",
   });
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -126,7 +124,6 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                 ) : null}
               </div>
             </div>
-            <Info label="Ghi chú" value={display(device.ghi_chu)} className="md:col-span-2" />
           </div>
         </Panel>
 
@@ -159,8 +156,8 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                   }
                 />
                 <Info
-                  label="Ngày cần thu hồi"
-                  value={formatDate(detail.certificateReport.ngay_can_thu_hoi)}
+                  label="Hạn gia hạn lần đầu"
+                  value={formatDate(detail.certificateReport.han_gia_han_lan_dau)}
                 />
               </div>
               <TextLinkButton href="/dashboard/chung-thu-so">Quản lý chứng thư</TextLinkButton>
@@ -218,9 +215,6 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
               ))}
             </Select>
           </Field>
-          <Field label="Ghi chú cấu hình" className="md:col-span-2">
-            <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
-          </Field>
         </div>
         <div className="mt-4 flex justify-end">
           <Button type="button" onClick={saveConfig} disabled={isPending}>
@@ -277,7 +271,6 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                   <th>Số hiệu trước</th>
                   <th>Số hiệu sau</th>
                   <th>Hiệu lực sau</th>
-                  <th>Ghi chú</th>
                 </tr>
               </thead>
               <tbody>
@@ -288,7 +281,6 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                     <td>{display(row.so_hieu_chung_thu_so_truoc)}</td>
                     <td>{display(row.so_hieu_chung_thu_so_sau)}</td>
                     <td>{formatDate(row.ngay_het_hieu_luc_sau)}</td>
-                    <td>{display(row.ghi_chu)}</td>
                   </tr>
                 ))}
               </tbody>

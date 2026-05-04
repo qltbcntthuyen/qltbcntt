@@ -7,10 +7,7 @@ export default async function MaintenancePage() {
 
   return (
     <>
-      <PageHeader
-        title="Bảo trì, sửa chữa"
-        description="Ghi nhận sự cố, bảo trì định kỳ, kết quả xử lý, chi phí và đơn vị sửa chữa thiết bị."
-      />
+      <PageHeader title="Bảo trì, sửa chữa" />
       <OperationsClient data={data} />
     </>
   );

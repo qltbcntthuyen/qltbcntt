@@ -19,10 +19,7 @@ export default async function CertificatePage({
 
   return (
     <>
-      <PageHeader
-        title="Chứng thư số"
-        description="Theo dõi vòng đời chứng thư số: cấp mới, gia hạn, thay đổi thông tin và thu hồi."
-      />
+      <PageHeader title="Chứng thư số" />
       <CertificateListClient
         rows={rows}
         records={records}

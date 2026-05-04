@@ -1,11 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import { deletePersonAction, savePersonAction, type EntityInput } from "@/app/actions/mutations";
-import { ActiveStatusBadge } from "@/components/common/page";
+import {
+  ActiveStatusBadge,
+  CertificateStatusBadge,
+  DeviceConditionBadge,
+  TextLinkButton,
+} from "@/components/common/page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -14,13 +20,14 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { LookupData, StaffItem } from "@/lib/data";
-import { display } from "@/lib/format";
+import { display, formatDate } from "@/lib/format";
 
 type PersonnelFilters = {
   q?: string;
   phongBan?: string;
   vaiTro?: string;
   trangThai?: string;
+  taiKhoan?: string;
 };
 
 const emptyPerson: EntityInput = {
@@ -63,10 +70,12 @@ export function PersonnelClient({
     phongBan: filters.phongBan ?? "",
     vaiTro: filters.vaiTro ?? "",
     trangThai: filters.trangThai ?? "all",
+    taiKhoan: filters.taiKhoan ?? "all",
   });
   const [form, setForm] = useState<EntityInput>(emptyPerson);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<StaffItem | null>(null);
+  const [selectedPerson, setSelectedPerson] = useState<StaffItem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -118,7 +127,7 @@ export function PersonnelClient({
   return (
     <div className="space-y-4">
       <section className="admin-panel p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_160px_160px_auto]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(240px,1fr)_170px_150px_170px_170px_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -160,6 +169,16 @@ export function PersonnelClient({
             <option value="active">Đang hoạt động</option>
             <option value="inactive">Ngừng hoạt động</option>
           </Select>
+          <Select
+            value={filterState.taiKhoan ?? "all"}
+            onChange={(event) =>
+              setFilterState((current) => ({ ...current, taiKhoan: event.target.value }))
+            }
+          >
+            <option value="all">Quyền đăng nhập</option>
+            <option value="with_account">Đã cấp quyền</option>
+            <option value="without_account">Chưa cấp quyền</option>
+          </Select>
           <div className="flex gap-2">
             <Button type="button" onClick={() => applyFilters(filterState)}>
               Áp dụng
@@ -193,35 +212,66 @@ export function PersonnelClient({
               <thead>
                 <tr>
                   <th>Họ tên</th>
-                  <th>Tên đăng nhập</th>
+                  <th>Mã hồ sơ</th>
                   <th>Phòng ban</th>
-                  <th>Email</th>
-                  <th>Điện thoại</th>
+                  <th>Liên hệ</th>
                   <th>Vai trò</th>
+                  <th>Quyền đăng nhập</th>
                   <th>Trạng thái</th>
-                  <th>Auth user</th>
+                  <th>Thiết bị</th>
+                  <th>Chứng thư</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td className="font-medium text-slate-950">{row.ho_ten}</td>
+                  <tr key={row.id} className="cursor-pointer" onClick={() => setSelectedPerson(row)}>
+                    <td className="font-medium text-slate-950">
+                      <button
+                        type="button"
+                        className="text-left font-semibold text-slate-950 hover:text-primary hover:underline"
+                        onClick={() => setSelectedPerson(row)}
+                      >
+                        {row.ho_ten}
+                      </button>
+                    </td>
                     <td>{row.ten_dang_nhap}</td>
                     <td>{display(row.phong_ban?.ten_phong_ban)}</td>
-                    <td>{display(row.email)}</td>
-                    <td>{display(row.so_dien_thoai)}</td>
+                    <td>
+                      <div className="space-y-1">
+                        <p>{display(row.email)}</p>
+                        <p className="text-xs text-slate-500">{display(row.so_dien_thoai)}</p>
+                      </div>
+                    </td>
                     <td>{ROLE_LABELS[row.vai_tro] ?? row.vai_tro}</td>
+                    <td>{row.co_tai_khoan ? "Đã cấp quyền" : "Chưa cấp quyền"}</td>
                     <td>
                       <ActiveStatusBadge active={row.trang_thai} />
                     </td>
-                    <td className="max-w-[160px] truncate">{display(row.auth_user_id)}</td>
+                    <td>{row.thiet_bi_count}</td>
+                    <td>{row.chung_thu_count}</td>
                     <td>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEdit(row);
+                          }}
+                        >
                           Sửa
                         </Button>
-                        <Button type="button" variant="destructive" size="sm" onClick={() => setDeleteTarget(row)}>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDeleteTarget(row);
+                          }}
+                        >
                           <Trash2 className="size-4" />
                           Xóa
                         </Button>
@@ -245,7 +295,7 @@ export function PersonnelClient({
       <Modal
         open={dialogOpen}
         title={form.id ? "Chỉnh sửa nhân sự" : "Thêm nhân sự"}
-        description="Hồ sơ này dùng để phân công thiết bị và xác định quyền quản trị khi có auth_user_id tương ứng."
+        description="Hồ sơ này dùng để phân công thiết bị, chứng thư số và theo dõi nhân sự nội bộ."
         onClose={() => setDialogOpen(false)}
         className="max-w-3xl"
       >
@@ -258,7 +308,7 @@ export function PersonnelClient({
           <Field label="Họ tên" required>
             <Input value={String(form.ho_ten ?? "")} onChange={(e) => setField("ho_ten", e.target.value)} />
           </Field>
-          <Field label="Tên đăng nhập" required>
+          <Field label="Mã hồ sơ" required>
             <Input value={String(form.ten_dang_nhap ?? "")} onChange={(e) => setField("ten_dang_nhap", e.target.value)} />
           </Field>
           <Field label="Email">
@@ -268,14 +318,17 @@ export function PersonnelClient({
             <Input value={String(form.so_dien_thoai ?? "")} onChange={(e) => setField("so_dien_thoai", e.target.value)} />
           </Field>
           <Field label="Phòng ban">
-            <Select value={String(form.phong_ban_id ?? "")} onChange={(e) => setField("phong_ban_id", e.target.value)}>
-              <option value="">Chưa chọn</option>
-              {lookups.departments.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.ten_phong_ban}
-                </option>
-              ))}
-            </Select>
+            <div className="space-y-2">
+              <Select value={String(form.phong_ban_id ?? "")} onChange={(e) => setField("phong_ban_id", e.target.value)}>
+                <option value="">Chưa chọn</option>
+                {lookups.departments.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.ten_phong_ban}
+                  </option>
+                ))}
+              </Select>
+              <TextLinkButton href="/dashboard/phong-ban" className="w-fit">Thêm phòng ban</TextLinkButton>
+            </div>
           </Field>
           <Field label="Vai trò" required>
             <Select value={String(form.vai_tro ?? "user")} onChange={(e) => setField("vai_tro", e.target.value)}>
@@ -284,13 +337,20 @@ export function PersonnelClient({
               <option value="user">Nhân sự</option>
             </Select>
           </Field>
-          <Field label="Auth user ID" className="md:col-span-2">
-            <Input
-              value={String(form.auth_user_id ?? "")}
-              onChange={(e) => setField("auth_user_id", e.target.value)}
-              placeholder="UUID của tài khoản Supabase Auth, nếu người này được phép đăng nhập"
-            />
-          </Field>
+          <details className="md:col-span-2 rounded-md border border-border p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+              Quyền đăng nhập
+            </summary>
+            <div className="mt-3">
+              <Field label="Mã liên kết tài khoản">
+                <Input
+                  value={String(form.auth_user_id ?? "")}
+                  onChange={(e) => setField("auth_user_id", e.target.value)}
+                  placeholder="UUID tài khoản đăng nhập, chỉ dùng cho admin/IT"
+                />
+              </Field>
+            </div>
+          </details>
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input
               type="checkbox"
@@ -319,6 +379,142 @@ export function PersonnelClient({
         onCancel={() => setDeleteTarget(null)}
         onConfirm={deleteSelected}
       />
+
+      <PersonDetailDrawer person={selectedPerson} onClose={() => setSelectedPerson(null)} />
+    </div>
+  );
+}
+
+function PersonDetailDrawer({
+  person,
+  onClose,
+}: {
+  person: StaffItem | null;
+  onClose: () => void;
+}) {
+  if (!person) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        className="absolute inset-0 bg-slate-950/30"
+        aria-label="Đóng chi tiết nhân sự"
+        onClick={onClose}
+      />
+      <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col bg-white shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+          <div>
+            <p className="text-sm font-semibold text-blue-700">Hồ sơ nhân sự</p>
+            <h2 className="mt-1 font-heading text-2xl font-bold text-slate-950">{person.ho_ten}</h2>
+            <p className="mt-1 text-sm text-slate-500">Mã hồ sơ: {display(person.ten_dang_nhap)}</p>
+          </div>
+          <button
+            type="button"
+            className="flex size-9 items-center justify-center rounded-md border border-border text-slate-600 hover:bg-slate-50"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+            <span className="sr-only">Đóng</span>
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          <section className="rounded-md border border-border p-4">
+            <h3 className="font-heading text-base font-semibold text-slate-950">Thông tin chính</h3>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <InfoTerm label="Phòng ban" value={display(person.phong_ban?.ten_phong_ban)} />
+              <InfoTerm label="Vai trò" value={ROLE_LABELS[person.vai_tro] ?? person.vai_tro} />
+              <InfoTerm label="Email" value={display(person.email)} />
+              <InfoTerm label="Số điện thoại" value={display(person.so_dien_thoai)} />
+              <InfoTerm label="Quyền đăng nhập" value={person.co_tai_khoan ? "Đã cấp quyền" : "Chưa cấp quyền"} />
+              <div>
+                <dt className="text-xs font-semibold uppercase text-slate-500">Trạng thái</dt>
+                <dd className="mt-1">
+                  <ActiveStatusBadge active={person.trang_thai} />
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="rounded-md border border-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-heading text-base font-semibold text-slate-950">
+                Thiết bị đang sử dụng
+              </h3>
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700">
+                {person.assignedDevices.length}
+              </span>
+            </div>
+            {person.assignedDevices.length ? (
+              <div className="mt-3 divide-y divide-border">
+                {person.assignedDevices.map((device) => (
+                  <Link
+                    key={device.id}
+                    href={`/dashboard/thiet-bi/${device.id}`}
+                    className="block py-3 hover:text-primary"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-950">{device.ma_thiet_bi}</p>
+                        <p className="mt-1 text-sm text-slate-600">{device.ten_thiet_bi}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {display(device.loai_thiet_bi?.ten_loai)} · {display(device.phong_ban?.ten_phong_ban)}
+                        </p>
+                      </div>
+                      <DeviceConditionBadge label={device.tinh_trang?.ten_tinh_trang} />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">Nhân sự này chưa được gắn thiết bị.</p>
+            )}
+          </section>
+
+          <section className="rounded-md border border-border p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="font-heading text-base font-semibold text-slate-950">Chứng thư số</h3>
+              <span className="rounded-md bg-slate-100 px-2 py-1 text-sm font-semibold text-slate-700">
+                {person.certificates.length}
+              </span>
+            </div>
+            {person.certificates.length ? (
+              <div className="mt-3 divide-y divide-border">
+                {person.certificates.map((certificate) => (
+                  <div
+                    key={certificate.thiet_bi_chung_thu_so_id ?? `${certificate.so_hieu_chung_thu_so}-${certificate.thiet_bi_id}`}
+                    className="py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-950">
+                          {display(certificate.so_hieu_chung_thu_so)}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {display(certificate.so_hieu_thiet_bi)} · hết hạn {formatDate(certificate.ngay_het_hieu_luc)}
+                        </p>
+                      </div>
+                      <CertificateStatusBadge status={certificate.trang_thai} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-500">Nhân sự này chưa có chứng thư số.</p>
+            )}
+          </section>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function InfoTerm({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase text-slate-500">{label}</dt>
+      <dd className="mt-1 font-medium text-slate-900">{value}</dd>
     </div>
   );
 }

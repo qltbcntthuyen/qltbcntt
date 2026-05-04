@@ -27,12 +27,13 @@ const reportOptions = [
   { value: "month", label: "Hết hạn trong tháng này" },
   { value: "quarter", label: "Hết hạn trong quý này" },
   { value: "year", label: "Hết hạn trong năm nay" },
+  { value: "renew", label: "Cần gia hạn" },
   { value: "revoke", label: "Cần thu hồi" },
   { value: "active", label: "Danh sách đang hiệu lực" },
   { value: "all", label: "Toàn bộ chứng thư" },
 ];
 
-const csvHeaders = [
+const excelHeaders = [
   "Số hiệu chứng thư",
   "Mã thiết bị",
   "Tên thiết bị",
@@ -41,10 +42,10 @@ const csvHeaders = [
   "Phòng ban",
   "Ngày hiệu lực",
   "Ngày hết hiệu lực",
+  "Hạn gia hạn lần đầu",
   "Số ngày còn lại",
   "Trạng thái",
   "Ngày cần thu hồi",
-  "Ghi chú",
 ];
 
 export function CertificateReportClient({
@@ -68,36 +69,44 @@ export function CertificateReportClient({
 
   function applyFilters(next: ReportFilters) {
     const params = new URLSearchParams();
+    params.set("nhom", "chung-thu-so");
     Object.entries(next).forEach(([key, value]) => {
       if (value && value !== "all") params.set(key, value);
     });
     router.push(`/dashboard/bao-cao${params.size ? `?${params}` : ""}`);
   }
 
-  function exportCsv() {
-    const lines = [
-      csvHeaders,
+  async function exportExcel() {
+    const XLSX = await import("xlsx");
+    const data = [
+      excelHeaders,
       ...rows.map((row) => [
-        row.so_hieu_chung_thu_so,
-        row.so_hieu_thiet_bi,
-        row.ten_thiet_bi,
-        row.loai_thiet_bi,
-        row.nguoi_su_dung,
-        row.ten_phong_ban,
+        row.so_hieu_chung_thu_so ?? "",
+        row.so_hieu_thiet_bi ?? "",
+        row.ten_thiet_bi ?? "",
+        row.loai_thiet_bi ?? "",
+        row.nguoi_su_dung ?? "",
+        row.ten_phong_ban ?? "",
         formatDate(row.ngay_hieu_luc),
         formatDate(row.ngay_het_hieu_luc),
-        row.so_ngay_con_lai == null ? "" : `${row.so_ngay_con_lai}`,
-        row.trang_thai,
+        formatDate(row.han_gia_han_lan_dau),
+        row.so_ngay_con_lai ?? "",
+        row.trang_thai ?? "",
         formatDate(row.ngay_can_thu_hoi),
-        row.ghi_chu,
       ]),
     ];
-    const csv = `\uFEFF${lines.map((line) => line.map(csvValue).join(",")).join("\r\n")}`;
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet["!cols"] = excelHeaders.map((header) => ({ wch: Math.max(header.length + 4, 18) }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Chung thu so");
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `bao-cao-chung-thu-so-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `bao-cao-chung-thu-so-${new Date().toISOString().slice(0, 10)}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -168,7 +177,7 @@ export function CertificateReportClient({
             <Button type="button" onClick={() => applyFilters(filterState)}>
               Lọc
             </Button>
-            <Button type="button" variant="outline" size="icon" onClick={() => router.push("/dashboard/bao-cao")}>
+            <Button type="button" variant="outline" size="icon" onClick={() => router.push("/dashboard/bao-cao?nhom=chung-thu-so")}>
               <RotateCcw className="size-4" />
               <span className="sr-only">Đặt lại</span>
             </Button>
@@ -178,9 +187,9 @@ export function CertificateReportClient({
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">Kết quả báo cáo: {rows.length} chứng thư</p>
-        <Button type="button" onClick={exportCsv} disabled={!rows.length}>
+        <Button type="button" onClick={exportExcel} disabled={!rows.length}>
           <Download className="size-4" />
-          Xuất CSV
+          Xuất Excel
         </Button>
       </div>
 
@@ -195,6 +204,7 @@ export function CertificateReportClient({
                   <th>Người sử dụng</th>
                   <th>Phòng ban</th>
                   <th>Ngày hết hạn</th>
+                  <th>Hạn gia hạn lần đầu</th>
                   <th>Còn lại</th>
                   <th>Ngày cần thu hồi</th>
                   <th>Trạng thái</th>
@@ -216,6 +226,7 @@ export function CertificateReportClient({
                     <td>{display(row.nguoi_su_dung)}</td>
                     <td>{display(row.ten_phong_ban)}</td>
                     <td>{formatDate(row.ngay_het_hieu_luc)}</td>
+                    <td>{formatDate(row.han_gia_han_lan_dau)}</td>
                     <td>
                       {row.so_ngay_con_lai == null ? "Không có dữ liệu" : `${row.so_ngay_con_lai} ngày`}
                     </td>
@@ -239,9 +250,4 @@ export function CertificateReportClient({
       </section>
     </div>
   );
-}
-
-function csvValue(value: unknown) {
-  const text = String(value ?? "");
-  return `"${text.replaceAll("\"", "\"\"")}"`;
 }

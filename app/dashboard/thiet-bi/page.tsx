@@ -19,12 +19,8 @@ export default async function DevicesPage({
 
   return (
     <>
-      <PageHeader
-        title="Thiết bị"
-        description="Quản lý danh sách trang thiết bị CNTT, đơn vị sử dụng, tình trạng và chứng thư số liên quan."
-      />
+      <PageHeader title="Thiết bị" />
       <DeviceListClient rows={rows} lookups={lookups} filters={params} />
     </>
   );
 }
-

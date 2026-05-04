@@ -18,10 +18,7 @@ export default async function DeviceDetailPage({
 
   return (
     <>
-      <PageHeader
-        title={`${detail.device.ma_thiet_bi} - ${detail.device.ten_thiet_bi}`}
-        description="Theo dõi thông tin tài sản, cấu hình máy tính, bàn giao, bảo trì và chứng thư số liên quan."
-      />
+      <PageHeader title={`${detail.device.ma_thiet_bi} - ${detail.device.ten_thiet_bi}`} />
       <DeviceDetailClient detail={detail} />
     </>
   );

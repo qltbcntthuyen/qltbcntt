@@ -58,6 +58,17 @@ export type MaintenanceItem = Maintenance & {
 
 export type StaffItem = Staff & {
   phong_ban: Department | null;
+  assignedDevices: DeviceListItem[];
+  certificates: CertificateReportRow[];
+  thiet_bi_count: number;
+  chung_thu_count: number;
+  co_tai_khoan: boolean;
+};
+
+export type DepartmentItem = Department & {
+  nhan_su_count: number;
+  thiet_bi_count: number;
+  chung_thu_count: number;
 };
 
 export type CatalogRow = {
@@ -72,7 +83,9 @@ export type DashboardData = {
   metrics: {
     totalDevices: number;
     activeDevices: number;
+    unassignedDevices: number;
     expiringCertificates: number;
+    renewalCertificates: number;
     revokeCertificates: number;
     trackedMaintenance: number;
   };
@@ -143,13 +156,56 @@ export async function getLookups(): Promise<LookupData> {
   };
 }
 
+export async function getDepartments(): Promise<DepartmentItem[]> {
+  if (!(await hasAdminAccess())) return [];
+
+  const supabase = await createClient();
+  const [departmentsResult, staffResult, devicesResult, certificatesResult] = await Promise.all([
+    supabase.from("phong_ban").select("*").order("ten_phong_ban"),
+    supabase.from("nguoi_dung").select("id, phong_ban_id").order("id"),
+    supabase.from("thiet_bi").select("id, phong_ban_id").order("id"),
+    supabase.from("v_bao_cao_chung_thu_so").select("phong_ban_id"),
+  ]);
+
+  const staffByDepartment = new Map<number, number>();
+  const devicesByDepartment = new Map<number, number>();
+  const certificatesByDepartment = new Map<number, number>();
+
+  for (const row of staffResult.data ?? []) {
+    if (row.phong_ban_id == null) continue;
+    staffByDepartment.set(row.phong_ban_id, (staffByDepartment.get(row.phong_ban_id) ?? 0) + 1);
+  }
+
+  for (const row of devicesResult.data ?? []) {
+    if (row.phong_ban_id == null) continue;
+    devicesByDepartment.set(row.phong_ban_id, (devicesByDepartment.get(row.phong_ban_id) ?? 0) + 1);
+  }
+
+  for (const row of certificatesResult.data ?? []) {
+    if (row.phong_ban_id == null) continue;
+    certificatesByDepartment.set(
+      row.phong_ban_id,
+      (certificatesByDepartment.get(row.phong_ban_id) ?? 0) + 1
+    );
+  }
+
+  return (departmentsResult.data ?? []).map((department) => ({
+    ...department,
+    nhan_su_count: staffByDepartment.get(department.id) ?? 0,
+    thiet_bi_count: devicesByDepartment.get(department.id) ?? 0,
+    chung_thu_count: certificatesByDepartment.get(department.id) ?? 0,
+  }));
+}
+
 export async function getDashboardData(): Promise<DashboardData> {
   if (!(await hasAdminAccess())) {
     return {
       metrics: {
         totalDevices: 0,
         activeDevices: 0,
+        unassignedDevices: 0,
         expiringCertificates: 0,
+        renewalCertificates: 0,
         revokeCertificates: 0,
         trackedMaintenance: 0,
       },
@@ -187,6 +243,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       (!device.thiet_bi_mat && Boolean(device.nguoi_su_dung_id))
     );
   }).length;
+  const unassignedDevices = lookups.devices.filter((device) => !device.nguoi_su_dung_id).length;
 
   const certificateRows = certificates.data ?? [];
   const maintenanceRows = maintenance.data ?? [];
@@ -195,8 +252,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     metrics: {
       totalDevices: lookups.devices.length,
       activeDevices,
+      unassignedDevices,
       expiringCertificates: certificateRows.filter(
         (row) => row.trang_thai === "sap_het_han"
+      ).length,
+      renewalCertificates: certificateRows.filter(
+        (row) => row.trang_thai === "het_han_cho_gia_han"
       ).length,
       revokeCertificates: certificateRows.filter(
         (row) => row.trang_thai === "can_thu_hoi"
@@ -205,7 +266,11 @@ export async function getDashboardData(): Promise<DashboardData> {
         (row) => !row.ngay_sua_chua || !row.ket_qua_xu_ly
       ).length,
     },
-    recentCertificates: certificateRows.slice(0, 8),
+    recentCertificates: certificateRows
+      .filter((row) =>
+        ["sap_het_han", "het_han_cho_gia_han", "can_thu_hoi"].includes(row.trang_thai ?? "")
+      )
+      .slice(0, 8),
     recentHandovers: enrichHandovers(handovers.data ?? [], lookups),
     recentMaintenance: enrichMaintenance(maintenanceRows, lookups),
   };
@@ -237,7 +302,14 @@ export async function getDevices(filters: {
       if (filters.loai && row.loai_thiet_bi_id !== Number(filters.loai)) return false;
       if (filters.phongBan && row.phong_ban_id !== Number(filters.phongBan)) return false;
       if (filters.tinhTrang && row.tinh_trang_id !== Number(filters.tinhTrang)) return false;
-      if (filters.nguoiDung && row.nguoi_su_dung_id !== Number(filters.nguoiDung)) return false;
+      if (filters.nguoiDung === "none" && row.nguoi_su_dung_id != null) return false;
+      if (
+        filters.nguoiDung &&
+        filters.nguoiDung !== "none" &&
+        row.nguoi_su_dung_id !== Number(filters.nguoiDung)
+      ) {
+        return false;
+      }
       if (
         filters.chungThu &&
         filters.chungThu !== "all" &&
@@ -367,21 +439,57 @@ export async function getPersonnel(filters: {
   phongBan?: string;
   vaiTro?: string;
   trangThai?: string;
+  taiKhoan?: string;
 }): Promise<{ rows: StaffItem[]; lookups: LookupData }> {
   if (!(await hasAdminAccess())) return { rows: [], lookups: emptyLookups() };
 
   const [lookups, supabase] = await Promise.all([getLookups(), createClient()]);
-  const { data } = await supabase.from("nguoi_dung").select("*").order("ho_ten");
+  const [{ data }, certificatesResult] = await Promise.all([
+    supabase.from("nguoi_dung").select("*").order("ho_ten"),
+    supabase.from("v_bao_cao_chung_thu_so").select("*"),
+  ]);
   const departmentMap = byId(lookups.departments);
   const term = normalizeText(filters.q);
+  const certificateRows = (certificatesResult.data ?? []) as CertificateReportRow[];
+  const enrichedDevices = enrichDevices(lookups.devices, lookups, certificateRows);
+  const devicesByStaff = new Map<number, DeviceListItem[]>();
+  const certificatesByStaff = new Map<number, CertificateReportRow[]>();
+
+  for (const device of enrichedDevices) {
+    if (device.nguoi_su_dung_id == null) continue;
+    const current = devicesByStaff.get(device.nguoi_su_dung_id) ?? [];
+    current.push(device);
+    devicesByStaff.set(device.nguoi_su_dung_id, current);
+  }
+
+  for (const certificate of certificateRows) {
+    if (certificate.nguoi_su_dung_id == null) continue;
+    const current = certificatesByStaff.get(certificate.nguoi_su_dung_id) ?? [];
+    current.push(certificate);
+    certificatesByStaff.set(certificate.nguoi_su_dung_id, current);
+  }
 
   const rows = (data ?? [])
-    .map((row) => ({ ...row, phong_ban: departmentMap.get(row.phong_ban_id ?? -1) ?? null }))
+    .map((row) => {
+      const assignedDevices = devicesByStaff.get(row.id) ?? [];
+      const certificates = certificatesByStaff.get(row.id) ?? [];
+      return {
+        ...row,
+        phong_ban: departmentMap.get(row.phong_ban_id ?? -1) ?? null,
+        assignedDevices,
+        certificates,
+        thiet_bi_count: assignedDevices.length,
+        chung_thu_count: certificates.length,
+        co_tai_khoan: Boolean(row.auth_user_id),
+      };
+    })
     .filter((row) => {
       if (filters.phongBan && row.phong_ban_id !== Number(filters.phongBan)) return false;
       if (filters.vaiTro && row.vai_tro !== filters.vaiTro) return false;
       if (filters.trangThai === "active" && !row.trang_thai) return false;
       if (filters.trangThai === "inactive" && row.trang_thai) return false;
+      if (filters.taiKhoan === "with_account" && !row.co_tai_khoan) return false;
+      if (filters.taiKhoan === "without_account" && row.co_tai_khoan) return false;
       return includesTerm(term, [
         row.ho_ten,
         row.ten_dang_nhap,
@@ -431,6 +539,7 @@ export async function getReportRows(filters: {
       return expiresAt?.getFullYear() === currentYear;
     }
     if (filters.report === "revoke") return row.trang_thai === "can_thu_hoi";
+    if (filters.report === "renew") return row.trang_thai === "het_han_cho_gia_han";
     if (filters.report === "active") return row.trang_thai === "dang_hieu_luc";
     return true;
   });
@@ -456,6 +565,7 @@ export async function getReportRows(filters: {
         return date?.getFullYear() === currentYear;
       }).length,
       revoke: rows.filter((row) => row.trang_thai === "can_thu_hoi").length,
+      renew: rows.filter((row) => row.trang_thai === "het_han_cho_gia_han").length,
       active: rows.filter((row) => row.trang_thai === "dang_hieu_luc").length,
     },
   };
@@ -490,8 +600,8 @@ export async function getOperations(active: "ban-giao" | "bao-tri") {
 export async function getCatalog(kind: CatalogKind) {
   if (!(await hasAdminAccess())) return { kind, rows: [] as CatalogRow[] };
   const supabase = await createClient();
-  const valid = CATALOG_OPTIONS.some((option) => option.value === kind);
-  const selected = valid ? kind : "phong_ban";
+  const valid = kind === "phong_ban" || CATALOG_OPTIONS.some((option) => option.value === kind);
+  const selected = valid ? kind : "loai_thiet_bi";
 
   switch (selected) {
     case "phong_ban": {

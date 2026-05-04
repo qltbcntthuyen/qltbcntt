@@ -7,10 +7,7 @@ export default async function HandoverPage() {
 
   return (
     <>
-      <PageHeader
-        title="Bàn giao thiết bị"
-        description="Lập và theo dõi lịch sử bàn giao, thu hồi thiết bị theo người nhận và phòng ban."
-      />
+      <PageHeader title="Bàn giao thiết bị" />
       <OperationsClient data={data} />
     </>
   );

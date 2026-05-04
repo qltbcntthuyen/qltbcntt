@@ -18,23 +18,13 @@ export default async function LoginPage() {
           <div className="mx-auto flex size-12 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <ShieldCheck className="size-6" />
           </div>
-          <h1 className="mt-4 font-heading text-2xl font-bold text-slate-950">
-            Đăng nhập hệ thống
+          <h1 className="mt-4 font-heading text-xl font-bold leading-8 tracking-tight text-slate-950">
+            Hệ thống quản lí thiết bị công nghệ thông tin Sở Dân Tộc và Tôn Giáo
           </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            QLTBCNTT dành riêng cho tài khoản quản trị hoặc cán bộ IT đã được
-            cấp quyền.
-          </p>
         </div>
 
         <LoginForm />
-
-        <p className="mt-6 border-t border-border pt-4 text-center text-xs leading-5 text-slate-500">
-          Không lưu trữ mật khẩu trong hệ thống nội bộ. Việc xác thực được xử lý
-          bằng Supabase Auth.
-        </p>
       </section>
     </main>
   );
 }
-

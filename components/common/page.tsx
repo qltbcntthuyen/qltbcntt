@@ -6,6 +6,15 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { CERTIFICATE_STATUS_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
+const statToneClasses: Record<BadgeTone, string> = {
+  amber: "bg-amber-50 text-amber-700 ring-amber-200",
+  blue: "bg-blue-50 text-blue-700 ring-blue-200",
+  green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  neutral: "bg-slate-50 text-slate-600 ring-slate-200",
+  red: "bg-red-50 text-red-700 ring-red-200",
+  slate: "bg-slate-100 text-slate-700 ring-slate-200",
+};
+
 export function PageHeader({
   title,
   description,
@@ -45,14 +54,20 @@ export function StatCard({
 }) {
   return (
     <div className="admin-panel p-4">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-600">{label}</p>
-        <Badge tone={tone}>
-          <Icon className="mr-1 size-3" />
-          Theo dõi
-        </Badge>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-slate-600">{label}</p>
+          <p className="mt-3 font-heading text-3xl font-bold text-slate-950">{value}</p>
+        </div>
+        <div
+          className={cn(
+            "flex size-9 shrink-0 items-center justify-center rounded-md ring-1",
+            statToneClasses[tone]
+          )}
+        >
+          <Icon className="size-4" />
+        </div>
       </div>
-      <p className="mt-3 font-heading text-3xl font-bold text-slate-950">{value}</p>
     </div>
   );
 }
@@ -134,4 +149,3 @@ export function TableActionButton({
     </Button>
   );
 }
-

@@ -55,6 +55,12 @@ function boolValue(input: EntityInput, key: string, fallback = false) {
   return fallback;
 }
 
+function hasInputValue(input: EntityInput, key: string) {
+  const value = input[key];
+  if (value === null || value === undefined) return false;
+  return String(value).trim().length > 0;
+}
+
 function idValue(input: EntityInput) {
   return nullableNumber(input, "id");
 }
@@ -79,7 +85,7 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
     const id = idValue(input);
     const payload = {
       ho_ten: requiredText(input, "ho_ten", "họ tên"),
-      ten_dang_nhap: requiredText(input, "ten_dang_nhap", "tên đăng nhập"),
+      ten_dang_nhap: requiredText(input, "ten_dang_nhap", "mã hồ sơ"),
       email: nullableText(input, "email"),
       so_dien_thoai: nullableText(input, "so_dien_thoai"),
       phong_ban_id: nullableNumber(input, "phong_ban_id"),
@@ -94,6 +100,7 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
 
     if (result.error) throw result.error;
     revalidatePath("/dashboard/nhan-su");
+    revalidatePath("/dashboard/phong-ban");
     revalidatePath("/dashboard", "layout");
     return success(id ? "Đã cập nhật nhân sự." : "Đã thêm nhân sự.");
   } catch (error) {
@@ -108,6 +115,7 @@ export async function deletePersonAction(id: number): Promise<ActionResult> {
   const { error } = await supabase.from("nguoi_dung").delete().eq("id", id);
   if (error) return failure(error);
   revalidatePath("/dashboard/nhan-su");
+  revalidatePath("/dashboard/phong-ban");
   return success("Đã xóa nhân sự.");
 }
 
@@ -132,15 +140,46 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
       nguoi_su_dung_id: nullableNumber(input, "nguoi_su_dung_id"),
       la_thiet_bi_dung_chung: boolValue(input, "la_thiet_bi_dung_chung", false),
       thiet_bi_mat: boolValue(input, "thiet_bi_mat", false),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: null,
     };
 
     const result = id
-      ? await supabase.from("thiet_bi").update(payload).eq("id", id)
-      : await supabase.from("thiet_bi").insert(payload);
+      ? await supabase.from("thiet_bi").update(payload).eq("id", id).select("id").single()
+      : await supabase.from("thiet_bi").insert(payload).select("id").single();
 
     if (result.error) throw result.error;
+    const savedId = result.data?.id ?? id;
+    const hasComputerConfig = [
+      "mainboard",
+      "cpu",
+      "ram",
+      "o_cung",
+      "man_hinh",
+      "he_dieu_hanh_id",
+      "phan_mem_diet_virus_id",
+    ].some((key) => hasInputValue(input, key));
+
+    if (savedId && hasComputerConfig) {
+      const configPayload = {
+        thiet_bi_id: savedId,
+        mainboard: nullableText(input, "mainboard"),
+        cpu: nullableText(input, "cpu"),
+        ram: nullableText(input, "ram"),
+        o_cung: nullableText(input, "o_cung"),
+        man_hinh: nullableText(input, "man_hinh"),
+        he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
+        phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
+        ghi_chu: null,
+      };
+      const { error: configError } = await supabase
+        .from("cau_hinh_may_tinh")
+        .upsert(configPayload, { onConflict: "thiet_bi_id" });
+      if (configError) throw configError;
+    }
+
     revalidatePath("/dashboard/thiet-bi");
+    if (savedId) revalidatePath(`/dashboard/thiet-bi/${savedId}`);
+    revalidatePath("/dashboard/phong-ban");
     revalidatePath("/dashboard");
     return success(id ? "Đã cập nhật thiết bị." : "Đã thêm thiết bị.");
   } catch (error) {
@@ -155,6 +194,7 @@ export async function deleteDeviceAction(id: number): Promise<ActionResult> {
   const { error } = await supabase.from("thiet_bi").delete().eq("id", id);
   if (error) return failure(error);
   revalidatePath("/dashboard/thiet-bi");
+  revalidatePath("/dashboard/phong-ban");
   revalidatePath("/dashboard");
   return success("Đã xóa thiết bị.");
 }
@@ -174,7 +214,7 @@ export async function saveComputerConfigAction(input: EntityInput): Promise<Acti
       man_hinh: nullableText(input, "man_hinh"),
       he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
       phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: null,
     };
 
     const { error } = await supabase
@@ -212,7 +252,8 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         "ngay_het_hieu_luc",
         "ngày hết hiệu lực"
       ),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      han_gia_han_lan_dau: nullableText(input, "han_gia_han_lan_dau"),
+      ghi_chu: null,
       thoi_diem_gia_han_gan_nhat:
         id && eventType === "gia_han" ? new Date().toISOString() : undefined,
       thoi_diem_thay_doi_thong_tin_gan_nhat:
@@ -221,6 +262,12 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
 
     if (new Date(payload.ngay_het_hieu_luc) < new Date(payload.ngay_hieu_luc)) {
       throw new Error("Ngày hết hiệu lực phải sau hoặc bằng ngày hiệu lực.");
+    }
+    if (
+      payload.han_gia_han_lan_dau &&
+      new Date(payload.han_gia_han_lan_dau) < new Date(payload.ngay_het_hieu_luc)
+    ) {
+      throw new Error("Hạn gia hạn lần đầu phải sau hoặc bằng ngày hết hiệu lực.");
     }
 
     if (!id) {
@@ -233,7 +280,7 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
         ngay_hieu_luc_sau: payload.ngay_hieu_luc,
         ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
-        ghi_chu: payload.ghi_chu,
+        ghi_chu: null,
       });
       if (historyError) throw historyError;
     } else {
@@ -262,7 +309,7 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         ngay_hieu_luc_sau: payload.ngay_hieu_luc,
         ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
         ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
-        ghi_chu: payload.ghi_chu,
+        ghi_chu: null,
       });
       if (historyError) throw historyError;
     }
@@ -305,7 +352,7 @@ export async function revokeCertificateAction(id: number): Promise<ActionResult>
       so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
       ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
       ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
-      ghi_chu: "Thu hồi chứng thư số",
+      ghi_chu: null,
     });
     if (historyError) throw historyError;
 
@@ -344,7 +391,7 @@ export async function saveHandoverAction(input: EntityInput): Promise<ActionResu
       ngay_thu_hoi: nullableText(input, "ngay_thu_hoi"),
       hinh_thuc: nullableText(input, "hinh_thuc"),
       noi_dung: nullableText(input, "noi_dung"),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: null,
     };
 
     const result = id
@@ -362,6 +409,7 @@ export async function saveHandoverAction(input: EntityInput): Promise<ActionResu
 
     revalidatePath("/dashboard/ban-giao");
     revalidatePath("/dashboard/thiet-bi");
+    revalidatePath("/dashboard/phong-ban");
     revalidatePath("/dashboard");
     return success(id ? "Đã cập nhật bàn giao." : "Đã lập bàn giao.");
   } catch (error) {
@@ -395,7 +443,7 @@ export async function saveMaintenanceAction(input: EntityInput): Promise<ActionR
       ket_qua_xu_ly: nullableText(input, "ket_qua_xu_ly"),
       chi_phi: nullableNumber(input, "chi_phi"),
       don_vi_sua_chua: nullableText(input, "don_vi_sua_chua"),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: null,
     };
 
     const result = id
@@ -438,7 +486,7 @@ export async function saveCatalogAction(
         const payload = {
           ma_phong_ban: nullableText(input, "ma"),
           ten_phong_ban: requiredText(input, "ten", "tên phòng ban"),
-          ghi_chu: nullableText(input, "ghi_chu"),
+          ghi_chu: null,
         };
         const result = id
           ? await supabase.from("phong_ban").update(payload).eq("id", id)
@@ -450,7 +498,7 @@ export async function saveCatalogAction(
         const payload = {
           ma_loai: nullableText(input, "ma"),
           ten_loai: requiredText(input, "ten", "tên loại thiết bị"),
-          ghi_chu: nullableText(input, "ghi_chu"),
+          ghi_chu: null,
         };
         const result = id
           ? await supabase.from("loai_thiet_bi").update(payload).eq("id", id)
@@ -462,7 +510,7 @@ export async function saveCatalogAction(
         const payload = {
           ten_hang: requiredText(input, "ten", "tên hãng"),
           ten_model: nullableText(input, "phu"),
-          ghi_chu: nullableText(input, "ghi_chu"),
+          ghi_chu: null,
         };
         const result = id
           ? await supabase.from("hang_model").update(payload).eq("id", id)
@@ -496,7 +544,7 @@ export async function saveCatalogAction(
         const payload = {
           ma_tinh_trang: nullableText(input, "ma"),
           ten_tinh_trang: requiredText(input, "ten", "tên tình trạng"),
-          ghi_chu: nullableText(input, "ghi_chu"),
+          ghi_chu: null,
         };
         const result = id
           ? await supabase.from("tinh_trang_thiet_bi").update(payload).eq("id", id)
@@ -508,7 +556,7 @@ export async function saveCatalogAction(
         const payload = {
           ma_nguon_goc: nullableText(input, "ma"),
           ten_nguon_goc: requiredText(input, "ten", "tên nguồn gốc"),
-          ghi_chu: nullableText(input, "ghi_chu"),
+          ghi_chu: null,
         };
         const result = id
           ? await supabase.from("nguon_goc_tai_san").update(payload).eq("id", id)
@@ -519,6 +567,7 @@ export async function saveCatalogAction(
     }
 
     revalidatePath("/dashboard/danh-muc");
+    revalidatePath("/dashboard/phong-ban");
     revalidatePath("/dashboard", "layout");
     return success(id ? "Đã cập nhật danh mục." : "Đã thêm danh mục.");
   } catch (error) {
@@ -553,9 +602,9 @@ export async function deleteCatalogAction(
     }
     if (error) throw error;
     revalidatePath("/dashboard/danh-muc");
+    revalidatePath("/dashboard/phong-ban");
     return success("Đã xóa danh mục.");
   } catch (error) {
     return failure(error);
   }
 }
-

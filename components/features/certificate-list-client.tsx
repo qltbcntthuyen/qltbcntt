@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgePlus, RotateCcw, Search, ShieldAlert, Trash2 } from "lucide-react";
+import {
+  BadgePlus,
+  BadgeCheck,
+  CalendarClock,
+  FilePenLine,
+  RefreshCcw,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  Trash2,
+} from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 
 import {
@@ -11,14 +21,13 @@ import {
   saveCertificateAction,
   type EntityInput,
 } from "@/app/actions/mutations";
-import { CertificateStatusBadge } from "@/components/common/page";
+import { CertificateStatusBadge, StatCard } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { CERTIFICATE_STATUS_OPTIONS } from "@/lib/constants";
 import type { Certificate, CertificateReportRow, LookupData } from "@/lib/data";
 import { display, formatDate } from "@/lib/format";
@@ -35,8 +44,8 @@ const emptyCertificate: EntityInput = {
   so_hieu_chung_thu_so: "",
   ngay_hieu_luc: "",
   ngay_het_hieu_luc: "",
-  ghi_chu: "",
-  loai_su_kien: "thay_doi_thong_tin",
+  han_gia_han_lan_dau: "",
+  loai_su_kien: "cap_moi",
 };
 
 function recordToInput(record: Certificate): EntityInput {
@@ -47,7 +56,7 @@ function recordToInput(record: Certificate): EntityInput {
     so_hieu_chung_thu_so: record.so_hieu_chung_thu_so,
     ngay_hieu_luc: record.ngay_hieu_luc,
     ngay_het_hieu_luc: record.ngay_het_hieu_luc,
-    ghi_chu: record.ghi_chu ?? "",
+    han_gia_han_lan_dau: record.han_gia_han_lan_dau ?? "",
     loai_su_kien: "thay_doi_thong_tin",
   };
 }
@@ -65,6 +74,25 @@ export function CertificateListClient({
 }) {
   const router = useRouter();
   const recordMap = useMemo(() => new Map(records.map((item) => [item.id, item])), [records]);
+  const typeMap = useMemo(
+    () => new Map(lookups.deviceTypes.map((item) => [item.id, item])),
+    [lookups.deviceTypes]
+  );
+  const certificateDevices = useMemo(
+    () =>
+      lookups.devices.filter((device) => {
+        const type = typeMap.get(device.loai_thiet_bi_id);
+        const haystack = `${type?.ma_loai ?? ""} ${type?.ten_loai ?? ""}`.toLowerCase();
+        return haystack.includes("token") || haystack.includes("sim pki") || haystack.includes("sim_pki");
+      }),
+    [lookups.devices, typeMap]
+  );
+  const stats = {
+    active: rows.filter((row) => row.trang_thai === "dang_hieu_luc").length,
+    expiring: rows.filter((row) => row.trang_thai === "sap_het_han").length,
+    renew: rows.filter((row) => row.trang_thai === "het_han_cho_gia_han").length,
+    revoke: rows.filter((row) => row.trang_thai === "can_thu_hoi").length,
+  };
   const [filterState, setFilterState] = useState<CertificateFilters>({
     q: filters.q ?? "",
     trangThai: filters.trangThai ?? "all",
@@ -89,13 +117,22 @@ export function CertificateListClient({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function selectDevice(value: string) {
+    const device = certificateDevices.find((item) => String(item.id) === value);
+    setForm((current) => ({
+      ...current,
+      thiet_bi_id: value,
+      nguoi_su_dung_id: device?.nguoi_su_dung_id ?? current.nguoi_su_dung_id ?? "",
+    }));
+  }
+
   function openCreate() {
     setMessage(null);
     setForm(emptyCertificate);
     setDialogOpen(true);
   }
 
-  function openEdit(row: CertificateReportRow) {
+  function openEdit(row: CertificateReportRow, eventType: "gia_han" | "thay_doi_thong_tin") {
     const id = row.thiet_bi_chung_thu_so_id;
     const record = id ? recordMap.get(id) : null;
     if (!record) {
@@ -103,7 +140,7 @@ export function CertificateListClient({
       return;
     }
     setMessage(null);
-    setForm(recordToInput(record));
+    setForm({ ...recordToInput(record), loai_su_kien: eventType });
     setDialogOpen(true);
   }
 
@@ -142,6 +179,13 @@ export function CertificateListClient({
 
   return (
     <div className="space-y-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard label="Đang hiệu lực" value={stats.active} icon={BadgeCheck} tone="green" />
+        <StatCard label="Sắp hết hạn" value={stats.expiring} icon={CalendarClock} tone="amber" />
+        <StatCard label="Cần gia hạn" value={stats.renew} icon={RefreshCcw} tone="red" />
+        <StatCard label="Cần thu hồi" value={stats.revoke} icon={ShieldAlert} tone="red" />
+      </section>
+
       <section className="admin-panel p-4">
         <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_180px_180px_auto]">
           <div className="relative">
@@ -202,7 +246,7 @@ export function CertificateListClient({
         <p className="text-sm text-slate-600">Hiển thị {rows.length} chứng thư số</p>
         <Button type="button" onClick={openCreate}>
           <BadgePlus className="size-4" />
-          Thêm chứng thư
+          Cấp mới
         </Button>
       </div>
 
@@ -223,6 +267,7 @@ export function CertificateListClient({
                   <th>Người sử dụng</th>
                   <th>Phòng ban</th>
                   <th>Hiệu lực</th>
+                  <th>Hạn gia hạn lần đầu</th>
                   <th>Còn lại</th>
                   <th>Trạng thái</th>
                   <th>Thao tác</th>
@@ -251,6 +296,7 @@ export function CertificateListClient({
                         <p className="text-xs text-slate-500">đến {formatDate(row.ngay_het_hieu_luc)}</p>
                       </div>
                     </td>
+                    <td>{formatDate(row.han_gia_han_lan_dau)}</td>
                     <td>
                       {row.so_ngay_con_lai == null ? "Không có dữ liệu" : `${row.so_ngay_con_lai} ngày`}
                     </td>
@@ -259,8 +305,13 @@ export function CertificateListClient({
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)}>
-                          Sửa
+                        <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row, "gia_han")}>
+                          <RefreshCcw className="size-4" />
+                          Gia hạn
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row, "thay_doi_thong_tin")}>
+                          <FilePenLine className="size-4" />
+                          Đổi thông tin
                         </Button>
                         <Button
                           type="button"
@@ -300,8 +351,14 @@ export function CertificateListClient({
 
       <Modal
         open={dialogOpen}
-        title={form.id ? "Cập nhật chứng thư số" : "Thêm chứng thư số"}
-        description="Gắn chứng thư với thiết bị và người sử dụng thực tế. Các thay đổi sẽ được ghi vào lịch sử chứng thư."
+        title={
+          form.id
+            ? form.loai_su_kien === "gia_han"
+              ? "Gia hạn chứng thư số"
+              : "Thay đổi thông tin chứng thư"
+            : "Cấp mới chứng thư số"
+        }
+        description="Chứng thư chỉ gắn với thiết bị loại Sim PKI, Token hoặc Token mật. Khi chọn thiết bị, hệ thống tự điền người sử dụng nếu thiết bị đã được phân công."
         onClose={() => setDialogOpen(false)}
         className="max-w-3xl"
       >
@@ -312,9 +369,9 @@ export function CertificateListClient({
         ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Thiết bị" required>
-            <Select value={String(form.thiet_bi_id ?? "")} onChange={(e) => setField("thiet_bi_id", e.target.value)}>
+            <Select value={String(form.thiet_bi_id ?? "")} onChange={(e) => selectDevice(e.target.value)}>
               <option value="">Chọn thiết bị</option>
-              {lookups.devices.map((item) => (
+              {certificateDevices.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.ma_thiet_bi} - {item.ten_thiet_bi}
                 </option>
@@ -343,6 +400,7 @@ export function CertificateListClient({
               onChange={(e) => setField("loai_su_kien", e.target.value)}
               disabled={!form.id}
             >
+              <option value="cap_moi">Cấp mới</option>
               <option value="thay_doi_thong_tin">Thay đổi thông tin</option>
               <option value="gia_han">Gia hạn</option>
             </Select>
@@ -353,8 +411,8 @@ export function CertificateListClient({
           <Field label="Ngày hết hiệu lực" required>
             <Input type="date" value={String(form.ngay_het_hieu_luc ?? "")} onChange={(e) => setField("ngay_het_hieu_luc", e.target.value)} />
           </Field>
-          <Field label="Ghi chú" className="md:col-span-2">
-            <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
+          <Field label="Hạn gia hạn lần đầu">
+            <Input type="date" value={String(form.han_gia_han_lan_dau ?? "")} onChange={(e) => setField("han_gia_han_lan_dau", e.target.value)} />
           </Field>
         </div>
         <div className="mt-5 flex justify-end gap-2">

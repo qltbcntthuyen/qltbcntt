@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ClipboardCheck, Plus, Trash2, Wrench } from "lucide-react";
+import { ClipboardCheck, Plus, RotateCcw, Search, Trash2, Wrench } from "lucide-react";
 import { useState, useTransition } from "react";
 
 import {
@@ -20,7 +20,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { HandoverItem, LookupData, MaintenanceItem } from "@/lib/data";
-import { display, formatCurrency, formatDate, todayInputValue } from "@/lib/format";
+import { display, formatCurrency, formatDate, normalizeText, todayInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 type OperationMode = "ban-giao" | "bao-tri";
@@ -40,7 +40,6 @@ const emptyHandover: EntityInput = {
   ngay_thu_hoi: "",
   hinh_thuc: "Bàn giao sử dụng",
   noi_dung: "",
-  ghi_chu: "",
 };
 
 const emptyMaintenance: EntityInput = {
@@ -52,7 +51,6 @@ const emptyMaintenance: EntityInput = {
   ket_qua_xu_ly: "",
   chi_phi: "",
   don_vi_sua_chua: "",
-  ghi_chu: "",
 };
 
 function handoverToInput(row: HandoverItem): EntityInput {
@@ -65,7 +63,6 @@ function handoverToInput(row: HandoverItem): EntityInput {
     ngay_thu_hoi: row.ngay_thu_hoi ?? "",
     hinh_thuc: row.hinh_thuc ?? "",
     noi_dung: row.noi_dung ?? "",
-    ghi_chu: row.ghi_chu ?? "",
   };
 }
 
@@ -80,7 +77,6 @@ function maintenanceToInput(row: MaintenanceItem): EntityInput {
     ket_qua_xu_ly: row.ket_qua_xu_ly ?? "",
     chi_phi: row.chi_phi ?? "",
     don_vi_sua_chua: row.don_vi_sua_chua ?? "",
-    ghi_chu: row.ghi_chu ?? "",
   };
 }
 
@@ -92,8 +88,43 @@ export function OperationsClient({ data }: { data: OperationsData }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteHandover, setDeleteHandover] = useState<HandoverItem | null>(null);
   const [deleteMaintenance, setDeleteMaintenance] = useState<MaintenanceItem | null>(null);
+  const [filter, setFilter] = useState({ q: "", status: "all" });
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const filteredHandovers = data.handovers.filter((row) => {
+    const q = normalizeText(filter.q);
+    const matchesText =
+      !q ||
+      [
+        row.thiet_bi?.ma_thiet_bi,
+        row.thiet_bi?.ten_thiet_bi,
+        row.nguoi_nhan?.ho_ten,
+        row.phong_ban_nhan?.ten_phong_ban,
+        row.hinh_thuc,
+        row.noi_dung,
+      ].some((value) => normalizeText(String(value ?? "")).includes(q));
+    if (!matchesText) return false;
+    if (filter.status === "dang_ban_giao") return !row.ngay_thu_hoi;
+    if (filter.status === "da_thu_hoi") return Boolean(row.ngay_thu_hoi);
+    return true;
+  });
+  const filteredMaintenance = data.maintenance.filter((row) => {
+    const q = normalizeText(filter.q);
+    const matchesText =
+      !q ||
+      [
+        row.thiet_bi?.ma_thiet_bi,
+        row.thiet_bi?.ten_thiet_bi,
+        row.loai_xu_ly,
+        row.mo_ta_loi,
+        row.ket_qua_xu_ly,
+        row.don_vi_sua_chua,
+      ].some((value) => normalizeText(String(value ?? "")).includes(q));
+    if (!matchesText) return false;
+    if (filter.status === "dang_xu_ly") return !row.ket_qua_xu_ly;
+    if (filter.status === "da_xu_ly") return Boolean(row.ket_qua_xu_ly);
+    return true;
+  });
 
   function setField(key: string, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -165,6 +196,45 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         </Button>
       </div>
 
+      <section className="admin-panel p-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(220px,1fr)_200px_auto]">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              value={filter.q}
+              onChange={(event) => setFilter((current) => ({ ...current, q: event.target.value }))}
+              placeholder={
+                data.active === "ban-giao"
+                  ? "Tìm thiết bị, người nhận, phòng ban..."
+                  : "Tìm thiết bị, lỗi, kết quả, đơn vị sửa..."
+              }
+              className="pl-9"
+            />
+          </div>
+          <Select
+            value={filter.status}
+            onChange={(event) => setFilter((current) => ({ ...current, status: event.target.value }))}
+          >
+            <option value="all">Tất cả trạng thái</option>
+            {data.active === "ban-giao" ? (
+              <>
+                <option value="dang_ban_giao">Đang bàn giao</option>
+                <option value="da_thu_hoi">Đã thu hồi</option>
+              </>
+            ) : (
+              <>
+                <option value="dang_xu_ly">Đang xử lý</option>
+                <option value="da_xu_ly">Đã xử lý</option>
+              </>
+            )}
+          </Select>
+          <Button type="button" variant="outline" onClick={() => setFilter({ q: "", status: "all" })}>
+            <RotateCcw className="size-4" />
+            Đặt lại
+          </Button>
+        </div>
+      </section>
+
       {message ? (
         <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
           {message}
@@ -173,7 +243,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
 
       {data.active === "ban-giao" ? (
         <HandoverTable
-          rows={data.handovers}
+          rows={filteredHandovers}
           onEdit={(row) => {
             setMessage(null);
             setForm(handoverToInput(row));
@@ -183,7 +253,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         />
       ) : (
         <MaintenanceTable
-          rows={data.maintenance}
+          rows={filteredMaintenance}
           onEdit={(row) => {
             setMessage(null);
             setForm(maintenanceToInput(row));
@@ -419,9 +489,6 @@ function HandoverForm({
       <Field label="Nội dung" className="md:col-span-2">
         <Textarea value={String(form.noi_dung ?? "")} onChange={(e) => setField("noi_dung", e.target.value)} />
       </Field>
-      <Field label="Ghi chú" className="md:col-span-2">
-        <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
-      </Field>
     </div>
   );
 }
@@ -466,9 +533,6 @@ function MaintenanceForm({
       </Field>
       <Field label="Kết quả xử lý" className="md:col-span-2">
         <Textarea value={String(form.ket_qua_xu_ly ?? "")} onChange={(e) => setField("ket_qua_xu_ly", e.target.value)} />
-      </Field>
-      <Field label="Ghi chú" className="md:col-span-2">
-        <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
       </Field>
     </div>
   );

@@ -11,7 +11,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
-import { Textarea } from "@/components/ui/textarea";
 import { CATALOG_OPTIONS, type CatalogKind } from "@/lib/constants";
 import type { CatalogRow } from "@/lib/data";
 import { display } from "@/lib/format";
@@ -19,48 +18,41 @@ import { cn } from "@/lib/utils";
 
 const fieldLabels: Record<
   CatalogKind,
-  { name: string; code?: string; extra?: string; note: boolean; placeholder: string }
+  { name: string; code?: string; extra?: string; placeholder: string }
 > = {
   phong_ban: {
     name: "Tên phòng ban",
     code: "Mã phòng ban",
-    note: true,
     placeholder: "Ví dụ: Văn phòng",
   },
   loai_thiet_bi: {
     name: "Tên loại thiết bị",
     code: "Mã loại",
-    note: true,
     placeholder: "Ví dụ: Máy tính xách tay",
   },
   hang_model: {
     name: "Tên hãng",
     extra: "Model",
-    note: true,
     placeholder: "Ví dụ: Dell",
   },
   he_dieu_hanh: {
     name: "Tên hệ điều hành",
     extra: "Phiên bản",
-    note: false,
     placeholder: "Ví dụ: Windows",
   },
   phan_mem_diet_virus: {
     name: "Tên phần mềm",
     extra: "Phiên bản",
-    note: false,
     placeholder: "Ví dụ: Kaspersky",
   },
   tinh_trang_thiet_bi: {
     name: "Tên tình trạng",
     code: "Mã tình trạng",
-    note: true,
     placeholder: "Ví dụ: Đang sử dụng",
   },
   nguon_goc_tai_san: {
     name: "Tên nguồn gốc",
     code: "Mã nguồn gốc",
-    note: true,
     placeholder: "Ví dụ: Mua sắm tập trung",
   },
 };
@@ -69,7 +61,6 @@ const emptyCatalog: EntityInput = {
   ma: "",
   ten: "",
   phu: "",
-  ghi_chu: "",
 };
 
 function rowToInput(row: CatalogRow): EntityInput {
@@ -78,7 +69,6 @@ function rowToInput(row: CatalogRow): EntityInput {
     ma: row.secondary ?? "",
     ten: row.primary,
     phu: row.secondary ?? "",
-    ghi_chu: row.note ?? "",
   };
 }
 
@@ -201,7 +191,6 @@ export function CatalogClient({
                   <tr>
                     <th>{labels.name}</th>
                     <th>{labels.code ?? labels.extra ?? "Thông tin phụ"}</th>
-                    <th>Ghi chú</th>
                     <th>Thao tác</th>
                   </tr>
                 </thead>
@@ -210,7 +199,6 @@ export function CatalogClient({
                     <tr key={row.id}>
                       <td className="font-medium text-slate-950">{row.primary}</td>
                       <td>{display(row.secondary)}</td>
-                      <td>{display(row.note)}</td>
                       <td>
                         <div className="flex flex-wrap gap-2">
                           <Button type="button" variant="outline" size="sm" onClick={() => openEdit(row)}>
@@ -266,11 +254,6 @@ export function CatalogClient({
           {labels.extra ? (
             <Field label={labels.extra}>
               <Input value={String(form.phu ?? "")} onChange={(e) => setField("phu", e.target.value)} />
-            </Field>
-          ) : null}
-          {labels.note ? (
-            <Field label="Ghi chú">
-              <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
             </Field>
           ) : null}
         </div>
