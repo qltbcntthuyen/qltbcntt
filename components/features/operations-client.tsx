@@ -1,0 +1,534 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ClipboardCheck, Plus, Trash2, Wrench } from "lucide-react";
+import { useState, useTransition } from "react";
+
+import {
+  deleteHandoverAction,
+  deleteMaintenanceAction,
+  saveHandoverAction,
+  saveMaintenanceAction,
+  type EntityInput,
+} from "@/app/actions/mutations";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { HandoverItem, LookupData, MaintenanceItem } from "@/lib/data";
+import { display, formatCurrency, formatDate, todayInputValue } from "@/lib/format";
+import { cn } from "@/lib/utils";
+
+type OperationMode = "ban-giao" | "bao-tri";
+
+type OperationsData = {
+  active: OperationMode;
+  lookups: LookupData;
+  handovers: HandoverItem[];
+  maintenance: MaintenanceItem[];
+};
+
+const emptyHandover: EntityInput = {
+  thiet_bi_id: "",
+  nguoi_nhan_id: "",
+  phong_ban_nhan_id: "",
+  ngay_ban_giao: todayInputValue(),
+  ngay_thu_hoi: "",
+  hinh_thuc: "Bàn giao sử dụng",
+  noi_dung: "",
+  ghi_chu: "",
+};
+
+const emptyMaintenance: EntityInput = {
+  thiet_bi_id: "",
+  ngay_ghi_nhan: todayInputValue(),
+  ngay_sua_chua: "",
+  loai_xu_ly: "Bảo trì",
+  mo_ta_loi: "",
+  ket_qua_xu_ly: "",
+  chi_phi: "",
+  don_vi_sua_chua: "",
+  ghi_chu: "",
+};
+
+function handoverToInput(row: HandoverItem): EntityInput {
+  return {
+    id: row.id,
+    thiet_bi_id: row.thiet_bi_id,
+    nguoi_nhan_id: row.nguoi_nhan_id ?? "",
+    phong_ban_nhan_id: row.phong_ban_nhan_id ?? "",
+    ngay_ban_giao: row.ngay_ban_giao,
+    ngay_thu_hoi: row.ngay_thu_hoi ?? "",
+    hinh_thuc: row.hinh_thuc ?? "",
+    noi_dung: row.noi_dung ?? "",
+    ghi_chu: row.ghi_chu ?? "",
+  };
+}
+
+function maintenanceToInput(row: MaintenanceItem): EntityInput {
+  return {
+    id: row.id,
+    thiet_bi_id: row.thiet_bi_id,
+    ngay_ghi_nhan: row.ngay_ghi_nhan,
+    ngay_sua_chua: row.ngay_sua_chua ?? "",
+    loai_xu_ly: row.loai_xu_ly ?? "",
+    mo_ta_loi: row.mo_ta_loi ?? "",
+    ket_qua_xu_ly: row.ket_qua_xu_ly ?? "",
+    chi_phi: row.chi_phi ?? "",
+    don_vi_sua_chua: row.don_vi_sua_chua ?? "",
+    ghi_chu: row.ghi_chu ?? "",
+  };
+}
+
+export function OperationsClient({ data }: { data: OperationsData }) {
+  const router = useRouter();
+  const [form, setForm] = useState<EntityInput>(
+    data.active === "ban-giao" ? emptyHandover : emptyMaintenance
+  );
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteHandover, setDeleteHandover] = useState<HandoverItem | null>(null);
+  const [deleteMaintenance, setDeleteMaintenance] = useState<MaintenanceItem | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function setField(key: string, value: string) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function openCreate() {
+    setMessage(null);
+    setForm(data.active === "ban-giao" ? emptyHandover : emptyMaintenance);
+    setDialogOpen(true);
+  }
+
+  function submitForm() {
+    startTransition(async () => {
+      const result =
+        data.active === "ban-giao"
+          ? await saveHandoverAction(form)
+          : await saveMaintenanceAction(form);
+      setMessage(result.message);
+      if (result.ok) {
+        setDialogOpen(false);
+        router.refresh();
+      }
+    });
+  }
+
+  function confirmDelete() {
+    startTransition(async () => {
+      const result = deleteHandover
+        ? await deleteHandoverAction(deleteHandover.id)
+        : deleteMaintenance
+          ? await deleteMaintenanceAction(deleteMaintenance.id)
+          : null;
+      if (!result) return;
+      setMessage(result.message);
+      setDeleteHandover(null);
+      setDeleteMaintenance(null);
+      if (result.ok) router.refresh();
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-md border border-border bg-white p-1">
+          <Link
+            href="/dashboard/ban-giao"
+            className={cn(
+              buttonVariants({ variant: data.active === "ban-giao" ? "default" : "ghost", size: "sm" }),
+              "rounded-sm"
+            )}
+          >
+            <ClipboardCheck className="size-4" />
+            Bàn giao
+          </Link>
+          <Link
+            href="/dashboard/bao-tri"
+            className={cn(
+              buttonVariants({ variant: data.active === "bao-tri" ? "default" : "ghost", size: "sm" }),
+              "rounded-sm"
+            )}
+          >
+            <Wrench className="size-4" />
+            Bảo trì
+          </Link>
+        </div>
+        <Button type="button" onClick={openCreate}>
+          <Plus className="size-4" />
+          {data.active === "ban-giao" ? "Lập bàn giao" : "Ghi nhận bảo trì"}
+        </Button>
+      </div>
+
+      {message ? (
+        <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+          {message}
+        </p>
+      ) : null}
+
+      {data.active === "ban-giao" ? (
+        <HandoverTable
+          rows={data.handovers}
+          onEdit={(row) => {
+            setMessage(null);
+            setForm(handoverToInput(row));
+            setDialogOpen(true);
+          }}
+          onDelete={setDeleteHandover}
+        />
+      ) : (
+        <MaintenanceTable
+          rows={data.maintenance}
+          onEdit={(row) => {
+            setMessage(null);
+            setForm(maintenanceToInput(row));
+            setDialogOpen(true);
+          }}
+          onDelete={setDeleteMaintenance}
+        />
+      )}
+
+      <Modal
+        open={dialogOpen}
+        title={
+          form.id
+            ? data.active === "ban-giao"
+              ? "Cập nhật bàn giao"
+              : "Cập nhật bảo trì"
+            : data.active === "ban-giao"
+              ? "Lập bàn giao"
+              : "Ghi nhận bảo trì"
+        }
+        description={
+          data.active === "ban-giao"
+            ? "Ghi nhận thiết bị, người nhận và đơn vị nhận để cập nhật trạng thái sử dụng."
+            : "Ghi nhận lỗi, phương án xử lý, chi phí và đơn vị sửa chữa nếu có."
+        }
+        onClose={() => setDialogOpen(false)}
+        className="max-w-3xl"
+      >
+        {data.active === "ban-giao" ? (
+          <HandoverForm form={form} lookups={data.lookups} setField={setField} />
+        ) : (
+          <MaintenanceForm form={form} lookups={data.lookups} setField={setField} />
+        )}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+            Hủy
+          </Button>
+          <Button type="button" onClick={submitForm} disabled={isPending}>
+            {isPending ? "Đang lưu..." : "Lưu nghiệp vụ"}
+          </Button>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deleteHandover || deleteMaintenance)}
+        title="Xác nhận xóa nghiệp vụ"
+        description="Bạn có chắc muốn xóa bản ghi này? Thao tác có thể ảnh hưởng đến lịch sử theo dõi thiết bị."
+        confirmLabel="Xóa bản ghi"
+        pending={isPending}
+        onCancel={() => {
+          setDeleteHandover(null);
+          setDeleteMaintenance(null);
+        }}
+        onConfirm={confirmDelete}
+      />
+    </div>
+  );
+}
+
+function HandoverTable({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: HandoverItem[];
+  onEdit: (row: HandoverItem) => void;
+  onDelete: (row: HandoverItem) => void;
+}) {
+  return (
+    <section className="admin-panel overflow-hidden">
+      {rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-[1080px]">
+            <thead>
+              <tr>
+                <th>Ngày bàn giao</th>
+                <th>Thiết bị</th>
+                <th>Người nhận</th>
+                <th>Phòng ban nhận</th>
+                <th>Hình thức</th>
+                <th>Ngày thu hồi</th>
+                <th>Nội dung</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{formatDate(row.ngay_ban_giao)}</td>
+                  <td>
+                    <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                      {row.thiet_bi?.ma_thiet_bi ?? row.thiet_bi_id} - {display(row.thiet_bi?.ten_thiet_bi)}
+                    </Link>
+                  </td>
+                  <td>{display(row.nguoi_nhan?.ho_ten)}</td>
+                  <td>{display(row.phong_ban_nhan?.ten_phong_ban)}</td>
+                  <td>{display(row.hinh_thuc)}</td>
+                  <td>{formatDate(row.ngay_thu_hoi)}</td>
+                  <td>{display(row.noi_dung)}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => onEdit(row)}>
+                        Sửa
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(row)}>
+                        <Trash2 className="size-4" />
+                        Xóa
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-5">
+          <EmptyState title="Chưa có lịch sử bàn giao" description="Lập bàn giao để theo dõi ai đang sử dụng thiết bị nào." />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MaintenanceTable({
+  rows,
+  onEdit,
+  onDelete,
+}: {
+  rows: MaintenanceItem[];
+  onEdit: (row: MaintenanceItem) => void;
+  onDelete: (row: MaintenanceItem) => void;
+}) {
+  return (
+    <section className="admin-panel overflow-hidden">
+      {rows.length ? (
+        <div className="overflow-x-auto">
+          <table className="admin-table min-w-[1120px]">
+            <thead>
+              <tr>
+                <th>Ngày ghi nhận</th>
+                <th>Thiết bị</th>
+                <th>Loại xử lý</th>
+                <th>Mô tả lỗi</th>
+                <th>Ngày sửa</th>
+                <th>Kết quả</th>
+                <th>Chi phí</th>
+                <th>Đơn vị sửa chữa</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id}>
+                  <td>{formatDate(row.ngay_ghi_nhan)}</td>
+                  <td>
+                    <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                      {row.thiet_bi?.ma_thiet_bi ?? row.thiet_bi_id} - {display(row.thiet_bi?.ten_thiet_bi)}
+                    </Link>
+                  </td>
+                  <td>{display(row.loai_xu_ly)}</td>
+                  <td>{display(row.mo_ta_loi)}</td>
+                  <td>{formatDate(row.ngay_sua_chua)}</td>
+                  <td>{display(row.ket_qua_xu_ly)}</td>
+                  <td>{formatCurrency(row.chi_phi)}</td>
+                  <td>{display(row.don_vi_sua_chua)}</td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => onEdit(row)}>
+                        Sửa
+                      </Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={() => onDelete(row)}>
+                        <Trash2 className="size-4" />
+                        Xóa
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="p-5">
+          <EmptyState title="Chưa có bảo trì, sửa chữa" description="Ghi nhận lỗi hoặc bảo trì định kỳ để theo dõi xử lý." />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function HandoverForm({
+  form,
+  lookups,
+  setField,
+}: {
+  form: EntityInput;
+  lookups: LookupData;
+  setField: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="Thiết bị" required>
+        <DeviceSelect value={String(form.thiet_bi_id ?? "")} lookups={lookups} onChange={(value) => setField("thiet_bi_id", value)} />
+      </Field>
+      <Field label="Người nhận">
+        <StaffSelect value={String(form.nguoi_nhan_id ?? "")} lookups={lookups} onChange={(value) => setField("nguoi_nhan_id", value)} />
+      </Field>
+      <Field label="Phòng ban nhận">
+        <Select value={String(form.phong_ban_nhan_id ?? "")} onChange={(e) => setField("phong_ban_nhan_id", e.target.value)}>
+          <option value="">Chưa chọn</option>
+          {lookups.departments.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.ten_phong_ban}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      <Field label="Ngày bàn giao" required>
+        <Input type="date" value={String(form.ngay_ban_giao ?? "")} onChange={(e) => setField("ngay_ban_giao", e.target.value)} />
+      </Field>
+      <Field label="Ngày thu hồi">
+        <Input type="date" value={String(form.ngay_thu_hoi ?? "")} onChange={(e) => setField("ngay_thu_hoi", e.target.value)} />
+      </Field>
+      <Field label="Hình thức">
+        <Input value={String(form.hinh_thuc ?? "")} onChange={(e) => setField("hinh_thuc", e.target.value)} />
+      </Field>
+      <Field label="Nội dung" className="md:col-span-2">
+        <Textarea value={String(form.noi_dung ?? "")} onChange={(e) => setField("noi_dung", e.target.value)} />
+      </Field>
+      <Field label="Ghi chú" className="md:col-span-2">
+        <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
+function MaintenanceForm({
+  form,
+  lookups,
+  setField,
+}: {
+  form: EntityInput;
+  lookups: LookupData;
+  setField: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="Thiết bị" required>
+        <DeviceSelect value={String(form.thiet_bi_id ?? "")} lookups={lookups} onChange={(value) => setField("thiet_bi_id", value)} />
+      </Field>
+      <Field label="Ngày ghi nhận" required>
+        <Input type="date" value={String(form.ngay_ghi_nhan ?? "")} onChange={(e) => setField("ngay_ghi_nhan", e.target.value)} />
+      </Field>
+      <Field label="Ngày sửa chữa">
+        <Input type="date" value={String(form.ngay_sua_chua ?? "")} onChange={(e) => setField("ngay_sua_chua", e.target.value)} />
+      </Field>
+      <Field label="Loại xử lý">
+        <Select value={String(form.loai_xu_ly ?? "")} onChange={(e) => setField("loai_xu_ly", e.target.value)}>
+          <option value="">Chưa chọn</option>
+          <option value="Bảo trì">Bảo trì</option>
+          <option value="Sửa chữa">Sửa chữa</option>
+          <option value="Thay thế linh kiện">Thay thế linh kiện</option>
+          <option value="Kiểm tra định kỳ">Kiểm tra định kỳ</option>
+        </Select>
+      </Field>
+      <Field label="Chi phí">
+        <Input type="number" min="0" value={String(form.chi_phi ?? "")} onChange={(e) => setField("chi_phi", e.target.value)} />
+      </Field>
+      <Field label="Đơn vị sửa chữa">
+        <Input value={String(form.don_vi_sua_chua ?? "")} onChange={(e) => setField("don_vi_sua_chua", e.target.value)} />
+      </Field>
+      <Field label="Mô tả lỗi" className="md:col-span-2">
+        <Textarea value={String(form.mo_ta_loi ?? "")} onChange={(e) => setField("mo_ta_loi", e.target.value)} />
+      </Field>
+      <Field label="Kết quả xử lý" className="md:col-span-2">
+        <Textarea value={String(form.ket_qua_xu_ly ?? "")} onChange={(e) => setField("ket_qua_xu_ly", e.target.value)} />
+      </Field>
+      <Field label="Ghi chú" className="md:col-span-2">
+        <Textarea value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
+      </Field>
+    </div>
+  );
+}
+
+function DeviceSelect({
+  value,
+  lookups,
+  onChange,
+}: {
+  value: string;
+  lookups: LookupData;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Chọn thiết bị</option>
+      {lookups.devices.map((item) => (
+        <option key={item.id} value={item.id}>
+          {item.ma_thiet_bi} - {item.ten_thiet_bi}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function StaffSelect({
+  value,
+  lookups,
+  onChange,
+}: {
+  value: string;
+  lookups: LookupData;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">Chọn nhân sự</option>
+      {lookups.staff.map((item) => (
+        <option key={item.id} value={item.id}>
+          {item.ho_ten}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function Field({
+  label,
+  required,
+  children,
+  className,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <Label>
+        {label}
+        {required ? <span className="text-red-600"> *</span> : null}
+      </Label>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
