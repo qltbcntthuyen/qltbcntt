@@ -249,6 +249,11 @@ export function PersonnelClient({
         onClose={() => setDialogOpen(false)}
         className="max-w-3xl"
       >
+        {message ? (
+          <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {message}
+          </p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Họ tên" required>
             <Input value={String(form.ho_ten ?? "")} onChange={(e) => setField("ho_ten", e.target.value)} />

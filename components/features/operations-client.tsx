@@ -212,6 +212,11 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         onClose={() => setDialogOpen(false)}
         className="max-w-3xl"
       >
+        {message ? (
+          <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {message}
+          </p>
+        ) : null}
         {data.active === "ban-giao" ? (
           <HandoverForm form={form} lookups={data.lookups} setField={setField} />
         ) : (

@@ -305,6 +305,11 @@ export function CertificateListClient({
         onClose={() => setDialogOpen(false)}
         className="max-w-3xl"
       >
+        {message ? (
+          <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {message}
+          </p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Thiết bị" required>
             <Select value={String(form.thiet_bi_id ?? "")} onChange={(e) => setField("thiet_bi_id", e.target.value)}>
