@@ -36,18 +36,24 @@ export const ROLE_LABELS: Record<string, string> = {
 export const CERTIFICATE_STATUS_LABELS: Record<string, string> = {
   dang_hieu_luc: "Đang hiệu lực",
   sap_het_han: "Sắp hết hạn",
-  het_han_cho_gia_han: "Cần gia hạn",
+  het_han: "Hết hạn",
+  da_gia_han: "Đã gia hạn",
+  can_cap_moi: "Cần cấp mới",
   can_thu_hoi: "Cần thu hồi",
   da_thu_hoi: "Đã thu hồi",
+  da_thay_the: "Đã thay thế",
 };
 
 export const CERTIFICATE_STATUS_OPTIONS = [
   { value: "all", label: "Tất cả" },
   { value: "dang_hieu_luc", label: "Đang hiệu lực" },
   { value: "sap_het_han", label: "Sắp hết hạn" },
-  { value: "het_han_cho_gia_han", label: "Cần gia hạn" },
+  { value: "het_han", label: "Hết hạn" },
+  { value: "da_gia_han", label: "Đã gia hạn" },
+  { value: "can_cap_moi", label: "Cần cấp mới" },
   { value: "can_thu_hoi", label: "Cần thu hồi" },
   { value: "da_thu_hoi", label: "Đã thu hồi" },
+  { value: "da_thay_the", label: "Đã thay thế" },
 ];
 
 export const CATALOG_OPTIONS = [

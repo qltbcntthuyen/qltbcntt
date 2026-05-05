@@ -53,9 +53,9 @@ export default async function DashboardPage() {
       tone: "amber",
     },
     {
-      label: "Chứng thư cần gia hạn",
+      label: "Chứng thư hết hạn",
       value: data.metrics.renewalCertificates,
-      href: "/dashboard/chung-thu-so?trangThai=het_han_cho_gia_han",
+      href: "/dashboard/chung-thu-so?trangThai=het_han",
       icon: RefreshCcw,
       tone: "red",
     },
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
         data.metrics.expiringCertificates +
         data.metrics.renewalCertificates +
         data.metrics.revokeCertificates,
-      description: "Theo dõi hạn, gia hạn và thu hồi",
+      description: "Theo dõi serial, gia hạn, cấp mới và thu hồi",
     },
     {
       title: "Bàn giao",

@@ -23,6 +23,7 @@ export type Maintenance = Tables<"sua_chua_bao_tri">;
 export type Certificate = Tables<"thiet_bi_chung_thu_so">;
 export type CertificateHistory = Tables<"lich_su_chung_thu_so">;
 export type CertificateReportRow = ViewRows<"v_bao_cao_chung_thu_so">;
+export type CertificateDocumentConfig = Tables<"cau_hinh_van_ban_chung_thu_so">;
 
 export type LookupData = {
   departments: Department[];
@@ -247,6 +248,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const certificateRows = certificates.data ?? [];
   const maintenanceRows = maintenance.data ?? [];
+  const renewalStatuses = ["het_han", "can_cap_moi"];
+  const actionStatuses = ["sap_het_han", "het_han", "can_cap_moi", "can_thu_hoi"];
 
   return {
     metrics: {
@@ -257,7 +260,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         (row) => row.trang_thai === "sap_het_han"
       ).length,
       renewalCertificates: certificateRows.filter(
-        (row) => row.trang_thai === "het_han_cho_gia_han"
+        (row) => renewalStatuses.includes(row.trang_thai ?? "")
       ).length,
       revokeCertificates: certificateRows.filter(
         (row) => row.trang_thai === "can_thu_hoi"
@@ -267,9 +270,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       ).length,
     },
     recentCertificates: certificateRows
-      .filter((row) =>
-        ["sap_het_han", "het_han_cho_gia_han", "can_thu_hoi"].includes(row.trang_thai ?? "")
-      )
+      .filter((row) => actionStatuses.includes(row.trang_thai ?? ""))
       .slice(0, 8),
     recentHandovers: enrichHandovers(handovers.data ?? [], lookups),
     recentMaintenance: enrichMaintenance(maintenanceRows, lookups),
@@ -358,8 +359,18 @@ export async function getDeviceDetail(id: number) {
       .select("*")
       .eq("thiet_bi_id", id)
       .order("ngay_ghi_nhan", { ascending: false }),
-    supabase.from("thiet_bi_chung_thu_so").select("*").eq("thiet_bi_id", id).maybeSingle(),
-    supabase.from("v_bao_cao_chung_thu_so").select("*").eq("thiet_bi_id", id),
+    supabase
+      .from("thiet_bi_chung_thu_so")
+      .select("*")
+      .eq("thiet_bi_id", id)
+      .order("la_hien_hanh", { ascending: false })
+      .order("ngay_hieu_luc", { ascending: false }),
+    supabase
+      .from("v_bao_cao_chung_thu_so")
+      .select("*")
+      .eq("thiet_bi_id", id)
+      .order("la_hien_hanh", { ascending: false })
+      .order("ngay_hieu_luc", { ascending: false }),
     supabase
       .from("lich_su_chung_thu_so")
       .select("*")
@@ -378,8 +389,11 @@ export async function getDeviceDetail(id: number) {
   return {
     device: deviceRow,
     config: config.data as ComputerConfig | null,
-    certificate: certificates.data as Certificate | null,
-    certificateReport: (certificateRows.data ?? [])[0] ?? null,
+    certificate: ((certificates.data ?? []) as Certificate[]).find(
+      (row) => row.la_hien_hanh && !row.thoi_diem_thu_hoi
+    ) ?? null,
+    certificates: (certificates.data ?? []) as Certificate[],
+    certificateReport: selectCurrentCertificate(certificateRows.data ?? []),
     certificateHistory: (history.data ?? []) as CertificateHistory[],
     handovers: enrichHandovers(handovers.data ?? [], lookups),
     maintenance: enrichMaintenance(maintenance.data ?? [], lookups),
@@ -417,6 +431,12 @@ export async function getCertificates(filters: {
     }
     return includesTerm(term, [
       row.so_hieu_chung_thu_so,
+      row.ten_chung_thu_so,
+      row.email,
+      row.loai_chung_thu_so,
+      row.to_chuc,
+      row.thong_tin_chung,
+      row.id_chung_thu_so_nguon,
       row.so_hieu_thiet_bi,
       row.ten_thiet_bi,
       row.nguoi_su_dung,
@@ -430,7 +450,20 @@ export async function getCertificates(filters: {
 export async function getCertificateRecords() {
   if (!(await hasAdminAccess())) return [];
   const supabase = await createClient();
-  const { data } = await supabase.from("thiet_bi_chung_thu_so").select("*");
+  const { data } = await supabase
+    .from("thiet_bi_chung_thu_so")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function getCertificateHistoryRecords() {
+  if (!(await hasAdminAccess())) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("lich_su_chung_thu_so")
+    .select("*")
+    .order("thoi_diem_su_kien", { ascending: false });
   return data ?? [];
 }
 
@@ -538,8 +571,11 @@ export async function getReportRows(filters: {
     if (filters.report === "year") {
       return expiresAt?.getFullYear() === currentYear;
     }
+    if (filters.report === "expiring") return row.trang_thai === "sap_het_han";
+    if (filters.report === "renewed") return row.trang_thai === "da_gia_han";
+    if (filters.report === "new") return row.trang_thai === "can_cap_moi";
     if (filters.report === "revoke") return row.trang_thai === "can_thu_hoi";
-    if (filters.report === "renew") return row.trang_thai === "het_han_cho_gia_han";
+    if (filters.report === "renew") return row.trang_thai === "het_han";
     if (filters.report === "active") return row.trang_thai === "dang_hieu_luc";
     return true;
   });
@@ -565,7 +601,10 @@ export async function getReportRows(filters: {
         return date?.getFullYear() === currentYear;
       }).length,
       revoke: rows.filter((row) => row.trang_thai === "can_thu_hoi").length,
-      renew: rows.filter((row) => row.trang_thai === "het_han_cho_gia_han").length,
+      renew: rows.filter((row) => row.trang_thai === "het_han").length,
+      newIssue: rows.filter((row) => row.trang_thai === "can_cap_moi").length,
+      renewed: rows.filter((row) => row.trang_thai === "da_gia_han").length,
+      expiring: rows.filter((row) => row.trang_thai === "sap_het_han").length,
       active: rows.filter((row) => row.trang_thai === "dang_hieu_luc").length,
     },
   };
@@ -658,11 +697,20 @@ function enrichDevices(
   const staffMap = byId(lookups.staff);
   const sourceMap = byId(lookups.sources);
   const statusMap = byId(lookups.statuses);
-  const certificateMap = new Map(
-    certificates
-      .filter((row) => row.thiet_bi_id != null)
-      .map((row) => [row.thiet_bi_id as number, row])
-  );
+  const certificateMap = new Map<number, CertificateReportRow>();
+  const groupedCertificates = new Map<number, CertificateReportRow[]>();
+
+  for (const row of certificates) {
+    if (row.thiet_bi_id == null) continue;
+    const current = groupedCertificates.get(row.thiet_bi_id) ?? [];
+    current.push(row);
+    groupedCertificates.set(row.thiet_bi_id, current);
+  }
+
+  for (const [deviceId, rows] of groupedCertificates) {
+    const selected = selectCurrentCertificate(rows);
+    if (selected) certificateMap.set(deviceId, selected);
+  }
 
   return devices.map((device) => ({
     ...device,
@@ -674,6 +722,17 @@ function enrichDevices(
     tinh_trang: statusMap.get(device.tinh_trang_id ?? -1) ?? null,
     chung_thu: certificateMap.get(device.id) ?? null,
   }));
+}
+
+function selectCurrentCertificate(rows: CertificateReportRow[]) {
+  return (
+    rows.find((row) => row.la_hien_hanh && !row.thoi_diem_thu_hoi) ??
+    rows.find((row) => row.la_hien_hanh) ??
+    [...rows].sort((a, b) =>
+      String(b.ngay_hieu_luc ?? "").localeCompare(String(a.ngay_hieu_luc ?? ""))
+    )[0] ??
+    null
+  );
 }
 
 function enrichHandovers(rows: Handover[], lookups: LookupData): HandoverItem[] {

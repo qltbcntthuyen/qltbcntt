@@ -58,6 +58,7 @@ export function ConfirmDialog({
   confirmLabel = "Xác nhận",
   pending,
   tone = "danger",
+  children,
   onCancel,
   onConfirm,
 }: {
@@ -67,11 +68,13 @@ export function ConfirmDialog({
   confirmLabel?: string;
   pending?: boolean;
   tone?: "danger" | "primary";
+  children?: React.ReactNode;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
   return (
     <Modal open={open} title={title} description={description} onClose={onCancel} className="max-w-md">
+      {children}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
           Hủy
@@ -88,4 +91,3 @@ export function ConfirmDialog({
     </Modal>
   );
 }
-

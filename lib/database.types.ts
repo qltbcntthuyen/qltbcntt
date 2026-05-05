@@ -255,12 +255,23 @@ export type Database = {
           thiet_bi_id: number;
           nguoi_su_dung_id: number;
           so_hieu_chung_thu_so: string;
+          email: string | null;
+          ten_chung_thu_so: string | null;
+          loai_chung_thu_so: string | null;
+          to_chuc: string | null;
+          thong_tin_chung: string | null;
+          id_chung_thu_so_nguon: string | null;
+          da_gia_han: boolean;
+          la_hien_hanh: boolean;
+          chung_thu_goc_id: number | null;
+          chung_thu_thay_the_id: number | null;
           ngay_hieu_luc: string;
           ngay_het_hieu_luc: string;
           han_gia_han_lan_dau: string | null;
           thoi_diem_gia_han_gan_nhat: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat: string | null;
           thoi_diem_thu_hoi: string | null;
+          ly_do_thu_hoi: string | null;
           ghi_chu: string | null;
           created_at: string;
           updated_at: string;
@@ -270,12 +281,23 @@ export type Database = {
           thiet_bi_id: number;
           nguoi_su_dung_id: number;
           so_hieu_chung_thu_so: string;
+          email?: string | null;
+          ten_chung_thu_so?: string | null;
+          loai_chung_thu_so?: string | null;
+          to_chuc?: string | null;
+          thong_tin_chung?: string | null;
+          id_chung_thu_so_nguon?: string | null;
+          da_gia_han?: boolean;
+          la_hien_hanh?: boolean;
+          chung_thu_goc_id?: number | null;
+          chung_thu_thay_the_id?: number | null;
           ngay_hieu_luc: string;
           ngay_het_hieu_luc: string;
           han_gia_han_lan_dau?: string | null;
           thoi_diem_gia_han_gan_nhat?: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat?: string | null;
           thoi_diem_thu_hoi?: string | null;
+          ly_do_thu_hoi?: string | null;
           ghi_chu?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -284,6 +306,7 @@ export type Database = {
       lich_su_chung_thu_so: TableDefinition<
         {
           id: number;
+          thiet_bi_chung_thu_so_id: number | null;
           thiet_bi_id: number;
           loai_su_kien: string;
           thoi_diem_su_kien: string;
@@ -291,6 +314,18 @@ export type Database = {
           nguoi_su_dung_id_sau: number | null;
           so_hieu_chung_thu_so_truoc: string | null;
           so_hieu_chung_thu_so_sau: string | null;
+          email_truoc: string | null;
+          email_sau: string | null;
+          ten_chung_thu_so_truoc: string | null;
+          ten_chung_thu_so_sau: string | null;
+          to_chuc_truoc: string | null;
+          to_chuc_sau: string | null;
+          thong_tin_chung_truoc: string | null;
+          thong_tin_chung_sau: string | null;
+          noi_dung_thay_doi: string | null;
+          thong_tin_moi: string | null;
+          ly_do_thu_hoi: string | null;
+          mau_van_ban: string | null;
           ngay_hieu_luc_truoc: string | null;
           ngay_hieu_luc_sau: string | null;
           ngay_het_hieu_luc_truoc: string | null;
@@ -300,6 +335,7 @@ export type Database = {
         },
         {
           id?: number;
+          thiet_bi_chung_thu_so_id?: number | null;
           thiet_bi_id: number;
           loai_su_kien: string;
           thoi_diem_su_kien?: string;
@@ -307,12 +343,64 @@ export type Database = {
           nguoi_su_dung_id_sau?: number | null;
           so_hieu_chung_thu_so_truoc?: string | null;
           so_hieu_chung_thu_so_sau?: string | null;
+          email_truoc?: string | null;
+          email_sau?: string | null;
+          ten_chung_thu_so_truoc?: string | null;
+          ten_chung_thu_so_sau?: string | null;
+          to_chuc_truoc?: string | null;
+          to_chuc_sau?: string | null;
+          thong_tin_chung_truoc?: string | null;
+          thong_tin_chung_sau?: string | null;
+          noi_dung_thay_doi?: string | null;
+          thong_tin_moi?: string | null;
+          ly_do_thu_hoi?: string | null;
+          mau_van_ban?: string | null;
           ngay_hieu_luc_truoc?: string | null;
           ngay_hieu_luc_sau?: string | null;
           ngay_het_hieu_luc_truoc?: string | null;
           ngay_het_hieu_luc_sau?: string | null;
           ghi_chu?: string | null;
           created_at?: string;
+        }
+      >;
+      cau_hinh_van_ban_chung_thu_so: TableDefinition<
+        {
+          id: number;
+          ten_co_quan_chu_quan: string | null;
+          ten_co_quan: string | null;
+          so_van_ban_mac_dinh: string | null;
+          dia_diem: string | null;
+          nguoi_dau_moi: string | null;
+          so_dinh_danh: string | null;
+          ngay_cap_dinh_danh: string | null;
+          noi_cap_dinh_danh: string | null;
+          chuc_vu_dau_moi: string | null;
+          dien_thoai_dau_moi: string | null;
+          email_dau_moi: string | null;
+          dia_chi_tiep_nhan: string | null;
+          nguoi_ky: string | null;
+          chuc_vu_nguoi_ky: string | null;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: number;
+          ten_co_quan_chu_quan?: string | null;
+          ten_co_quan?: string | null;
+          so_van_ban_mac_dinh?: string | null;
+          dia_diem?: string | null;
+          nguoi_dau_moi?: string | null;
+          so_dinh_danh?: string | null;
+          ngay_cap_dinh_danh?: string | null;
+          noi_cap_dinh_danh?: string | null;
+          chuc_vu_dau_moi?: string | null;
+          dien_thoai_dau_moi?: string | null;
+          email_dau_moi?: string | null;
+          dia_chi_tiep_nhan?: string | null;
+          nguoi_ky?: string | null;
+          chuc_vu_nguoi_ky?: string | null;
+          created_at?: string;
+          updated_at?: string;
         }
       >;
     };
@@ -330,12 +418,23 @@ export type Database = {
           phong_ban_id: number | null;
           ten_phong_ban: string | null;
           so_hieu_chung_thu_so: string | null;
+          email: string | null;
+          ten_chung_thu_so: string | null;
+          loai_chung_thu_so: string | null;
+          to_chuc: string | null;
+          thong_tin_chung: string | null;
+          id_chung_thu_so_nguon: string | null;
+          da_gia_han: boolean | null;
+          la_hien_hanh: boolean | null;
+          chung_thu_goc_id: number | null;
+          chung_thu_thay_the_id: number | null;
           ngay_hieu_luc: string | null;
           ngay_het_hieu_luc: string | null;
           han_gia_han_lan_dau: string | null;
           thoi_diem_gia_han_gan_nhat: string | null;
           thoi_diem_thay_doi_thong_tin_gan_nhat: string | null;
           thoi_diem_thu_hoi: string | null;
+          ly_do_thu_hoi: string | null;
           ngay_can_thu_hoi: string | null;
           so_ngay_con_lai: number | null;
           trang_thai: string | null;

@@ -1,6 +1,6 @@
 import { PageHeader } from "@/components/common/page";
 import { CertificateListClient } from "@/components/features/certificate-list-client";
-import { getCertificateRecords, getCertificates } from "@/lib/data";
+import { getCertificateHistoryRecords, getCertificateRecords, getCertificates } from "@/lib/data";
 
 export default async function CertificatePage({
   searchParams,
@@ -8,13 +8,14 @@ export default async function CertificatePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const params = await searchParams;
-  const [{ rows, lookups }, records] = await Promise.all([
+  const [{ rows, lookups }, records, history] = await Promise.all([
     getCertificates({
       q: params.q,
       trangThai: params.trangThai,
       phongBan: params.phongBan,
     }),
     getCertificateRecords(),
+    getCertificateHistoryRecords(),
   ]);
 
   return (
@@ -23,6 +24,7 @@ export default async function CertificatePage({
       <CertificateListClient
         rows={rows}
         records={records}
+        history={history}
         lookups={lookups}
         filters={{
           q: params.q,

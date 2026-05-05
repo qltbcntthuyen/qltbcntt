@@ -2,10 +2,8 @@ import Link from "next/link";
 import {
   BadgeCheck,
   CalendarClock,
-  CalendarDays,
   HardDrive,
   RefreshCcw,
-  RotateCcw,
   ShieldAlert,
 } from "lucide-react";
 
@@ -92,10 +90,10 @@ async function CertificateReportSection({ params }: { params: Record<string, str
   return (
     <>
       <section className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-        <StatCard label="Hết hạn tháng này" value={summary.month} icon={CalendarClock} tone="amber" />
-        <StatCard label="Hết hạn quý này" value={summary.quarter} icon={CalendarDays} tone="blue" />
-        <StatCard label="Hết hạn năm nay" value={summary.year} icon={RotateCcw} tone="slate" />
-        <StatCard label="Cần gia hạn" value={summary.renew} icon={RefreshCcw} tone="red" />
+        <StatCard label="Sắp hết hạn" value={summary.expiring} icon={CalendarClock} tone="amber" />
+        <StatCard label="Hết hạn" value={summary.renew} icon={RefreshCcw} tone="red" />
+        <StatCard label="Đã gia hạn" value={summary.renewed} icon={BadgeCheck} tone="slate" />
+        <StatCard label="Cần cấp mới" value={summary.newIssue} icon={RefreshCcw} tone="red" />
         <StatCard label="Cần thu hồi" value={summary.revoke} icon={ShieldAlert} tone="red" />
         <StatCard label="Đang hiệu lực" value={summary.active} icon={BadgeCheck} tone="green" />
       </section>

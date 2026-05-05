@@ -41,6 +41,7 @@ type DeviceDetailData = {
   device: DeviceListItem;
   config: ComputerConfig | null;
   certificate: Certificate | null;
+  certificates: Certificate[];
   certificateReport: CertificateReportRow | null;
   certificateHistory: CertificateHistory[];
   handovers: HandoverItem[];
@@ -136,7 +137,7 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                     {display(detail.certificateReport.so_hieu_chung_thu_so)}
                   </p>
                   <p className="mt-1 text-sm text-slate-600">
-                    {display(detail.certificateReport.nguoi_su_dung)}
+                    {display(detail.certificateReport.ten_chung_thu_so ?? detail.certificateReport.nguoi_su_dung)}
                   </p>
                 </div>
                 <CertificateStatusBadge status={detail.certificateReport.trang_thai} />
@@ -158,6 +159,11 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                 <Info
                   label="Hạn gia hạn lần đầu"
                   value={formatDate(detail.certificateReport.han_gia_han_lan_dau)}
+                />
+                <Info label="Email" value={display(detail.certificateReport.email)} />
+                <Info
+                  label="Đã gia hạn"
+                  value={detail.certificateReport.da_gia_han ? "Có" : "Không"}
                 />
               </div>
               <TextLinkButton href="/dashboard/chung-thu-so">Quản lý chứng thư</TextLinkButton>
@@ -261,6 +267,34 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
       </section>
 
       <Panel title="Lịch sử chứng thư số" description="Các lần cấp mới, gia hạn, thay đổi thông tin và thu hồi.">
+        {detail.certificates.length ? (
+          <div className="mb-4 overflow-x-auto">
+            <table className="admin-table min-w-[860px]">
+              <thead>
+                <tr>
+                  <th>Serial CTS</th>
+                  <th>Tên CTS</th>
+                  <th>Hiệu lực</th>
+                  <th>Đã gia hạn</th>
+                  <th>Hiện hành</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.certificates.map((row) => (
+                  <tr key={row.id}>
+                    <td className="font-medium text-slate-950">{display(row.so_hieu_chung_thu_so)}</td>
+                    <td>{display(row.ten_chung_thu_so)}</td>
+                    <td>
+                      {formatDate(row.ngay_hieu_luc)} đến {formatDate(row.ngay_het_hieu_luc)}
+                    </td>
+                    <td>{row.da_gia_han ? "Có" : "Không"}</td>
+                    <td>{row.la_hien_hanh ? "Có" : "Không"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
         {detail.certificateHistory.length ? (
           <div className="overflow-x-auto">
             <table className="admin-table min-w-[980px]">

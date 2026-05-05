@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 
 import type { CatalogKind } from "@/lib/constants";
+import type { TablesInsert } from "@/lib/database.types";
 import { createClient } from "@/lib/server";
-import { toNumberOrNull, toOptionalString } from "@/lib/format";
+import { normalizeText, toNumberOrNull, toOptionalString } from "@/lib/format";
 import { requireAdminForAction } from "@/lib/auth";
 
 export type ActionResult = {
@@ -236,16 +237,21 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
   try {
     const supabase = await createClient();
     const id = idValue(input);
-    const eventType =
-      input.loai_su_kien === "gia_han" ? "gia_han" : "thay_doi_thong_tin";
+    const eventType = String(input.loai_su_kien ?? (id ? "thay_doi_thong_tin" : "cap_moi"));
     const payload = {
       thiet_bi_id: requiredNumber(input, "thiet_bi_id", "thiết bị"),
       nguoi_su_dung_id: requiredNumber(input, "nguoi_su_dung_id", "người sử dụng"),
       so_hieu_chung_thu_so: requiredText(
         input,
         "so_hieu_chung_thu_so",
-        "số hiệu chứng thư"
+        "Serial CTS"
       ),
+      email: nullableText(input, "email"),
+      ten_chung_thu_so: nullableText(input, "ten_chung_thu_so"),
+      loai_chung_thu_so: nullableText(input, "loai_chung_thu_so"),
+      to_chuc: nullableText(input, "to_chuc"),
+      thong_tin_chung: nullableText(input, "thong_tin_chung"),
+      id_chung_thu_so_nguon: nullableText(input, "id_chung_thu_so_nguon"),
       ngay_hieu_luc: requiredText(input, "ngay_hieu_luc", "ngày hiệu lực"),
       ngay_het_hieu_luc: requiredText(
         input,
@@ -254,10 +260,6 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
       ),
       han_gia_han_lan_dau: nullableText(input, "han_gia_han_lan_dau"),
       ghi_chu: null,
-      thoi_diem_gia_han_gan_nhat:
-        id && eventType === "gia_han" ? new Date().toISOString() : undefined,
-      thoi_diem_thay_doi_thong_tin_gan_nhat:
-        id && eventType !== "gia_han" ? new Date().toISOString() : undefined,
     };
 
     if (new Date(payload.ngay_het_hieu_luc) < new Date(payload.ngay_hieu_luc)) {
@@ -270,20 +272,8 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
       throw new Error("Hạn gia hạn lần đầu phải sau hoặc bằng ngày hết hiệu lực.");
     }
 
-    if (!id) {
-      const { error } = await supabase.from("thiet_bi_chung_thu_so").insert(payload);
-      if (error) throw error;
-      const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
-        thiet_bi_id: payload.thiet_bi_id,
-        loai_su_kien: "cap_moi",
-        nguoi_su_dung_id_sau: payload.nguoi_su_dung_id,
-        so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
-        ngay_hieu_luc_sau: payload.ngay_hieu_luc,
-        ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
-        ghi_chu: null,
-      });
-      if (historyError) throw historyError;
-    } else {
+    if (eventType === "thay_doi_thong_tin") {
+      if (!id) throw new Error("Vui lòng chọn CTS cần thay đổi thông tin.");
       const { data: previous, error: previousError } = await supabase
         .from("thiet_bi_chung_thu_so")
         .select("*")
@@ -294,20 +284,162 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
 
       const { error } = await supabase
         .from("thiet_bi_chung_thu_so")
-        .update(payload)
+        .update({
+          ...payload,
+          thoi_diem_thay_doi_thong_tin_gan_nhat: new Date().toISOString(),
+        })
         .eq("id", id);
       if (error) throw error;
 
       const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+        thiet_bi_chung_thu_so_id: id,
         thiet_bi_id: payload.thiet_bi_id,
-        loai_su_kien: eventType,
+        loai_su_kien: "thay_doi_thong_tin",
         nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
         nguoi_su_dung_id_sau: payload.nguoi_su_dung_id,
         so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
         so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
+        email_truoc: previous.email,
+        email_sau: payload.email,
+        ten_chung_thu_so_truoc: previous.ten_chung_thu_so,
+        ten_chung_thu_so_sau: payload.ten_chung_thu_so,
+        to_chuc_truoc: previous.to_chuc,
+        to_chuc_sau: payload.to_chuc,
+        thong_tin_chung_truoc: previous.thong_tin_chung,
+        thong_tin_chung_sau: payload.thong_tin_chung,
+        noi_dung_thay_doi: nullableText(input, "noi_dung_thay_doi"),
+        thong_tin_moi: nullableText(input, "thong_tin_moi"),
         ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
         ngay_hieu_luc_sau: payload.ngay_hieu_luc,
         ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
+        ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
+        ghi_chu: null,
+      });
+      if (historyError) throw historyError;
+    } else if (eventType === "gia_han") {
+      if (!id) throw new Error("Vui lòng chọn CTS gốc cần gia hạn.");
+      const { data: previous, error: previousError } = await supabase
+        .from("thiet_bi_chung_thu_so")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (previousError) throw previousError;
+      if (!previous) throw new Error("Không tìm thấy CTS gốc cần gia hạn.");
+      if (previous.thoi_diem_thu_hoi) throw new Error("CTS đã thu hồi không thể gia hạn.");
+      if (previous.da_gia_han || previous.chung_thu_goc_id) {
+        throw new Error("CTS này đã qua một lần gia hạn. Vui lòng dùng Cấp mới để tạo CTS mới.");
+      }
+
+      const now = new Date().toISOString();
+      const { error: retireError } = await supabase
+        .from("thiet_bi_chung_thu_so")
+        .update({
+          da_gia_han: true,
+          la_hien_hanh: false,
+          thoi_diem_gia_han_gan_nhat: now,
+        })
+        .eq("id", previous.id);
+      if (retireError) throw retireError;
+
+      const insertPayload = {
+        ...payload,
+        thiet_bi_id: previous.thiet_bi_id,
+        nguoi_su_dung_id: payload.nguoi_su_dung_id || previous.nguoi_su_dung_id,
+        id_chung_thu_so_nguon:
+          payload.id_chung_thu_so_nguon ?? previous.id_chung_thu_so_nguon ?? previous.so_hieu_chung_thu_so,
+        chung_thu_goc_id: previous.id,
+        da_gia_han: false,
+        la_hien_hanh: true,
+      };
+      const { data: inserted, error: insertError } = await supabase
+        .from("thiet_bi_chung_thu_so")
+        .insert(insertPayload)
+        .select("*")
+        .single();
+      if (insertError) throw insertError;
+
+      await supabase
+        .from("thiet_bi_chung_thu_so")
+        .update({ chung_thu_thay_the_id: inserted.id })
+        .eq("id", previous.id);
+
+      const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+        thiet_bi_chung_thu_so_id: inserted.id,
+        thiet_bi_id: previous.thiet_bi_id,
+        loai_su_kien: "gia_han",
+        nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
+        nguoi_su_dung_id_sau: insertPayload.nguoi_su_dung_id,
+        so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
+        so_hieu_chung_thu_so_sau: inserted.so_hieu_chung_thu_so,
+        email_truoc: previous.email,
+        email_sau: inserted.email,
+        ten_chung_thu_so_truoc: previous.ten_chung_thu_so,
+        ten_chung_thu_so_sau: inserted.ten_chung_thu_so,
+        to_chuc_truoc: previous.to_chuc,
+        to_chuc_sau: inserted.to_chuc,
+        thong_tin_chung_truoc: previous.thong_tin_chung,
+        thong_tin_chung_sau: inserted.thong_tin_chung,
+        ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
+        ngay_hieu_luc_sau: inserted.ngay_hieu_luc,
+        ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
+        ngay_het_hieu_luc_sau: inserted.ngay_het_hieu_luc,
+        ghi_chu: null,
+      });
+      if (historyError) throw historyError;
+    } else {
+      const { data: previousCurrent } = await supabase
+        .from("thiet_bi_chung_thu_so")
+        .select("*")
+        .eq("thiet_bi_id", payload.thiet_bi_id)
+        .eq("la_hien_hanh", true)
+        .is("thoi_diem_thu_hoi", null)
+        .maybeSingle();
+
+      if (previousCurrent) {
+        const { error: retireError } = await supabase
+          .from("thiet_bi_chung_thu_so")
+          .update({ la_hien_hanh: false })
+          .eq("id", previousCurrent.id);
+        if (retireError) throw retireError;
+      }
+
+      const { data: inserted, error } = await supabase
+        .from("thiet_bi_chung_thu_so")
+        .insert({
+          ...payload,
+          da_gia_han: false,
+          la_hien_hanh: true,
+        })
+        .select("*")
+        .single();
+      if (error) throw error;
+
+      if (previousCurrent) {
+        await supabase
+          .from("thiet_bi_chung_thu_so")
+          .update({ chung_thu_thay_the_id: inserted.id })
+          .eq("id", previousCurrent.id);
+      }
+
+      const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+        thiet_bi_chung_thu_so_id: inserted.id,
+        thiet_bi_id: payload.thiet_bi_id,
+        loai_su_kien: "cap_moi",
+        nguoi_su_dung_id_truoc: previousCurrent?.nguoi_su_dung_id ?? null,
+        nguoi_su_dung_id_sau: payload.nguoi_su_dung_id,
+        so_hieu_chung_thu_so_truoc: previousCurrent?.so_hieu_chung_thu_so ?? null,
+        so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
+        email_truoc: previousCurrent?.email ?? null,
+        email_sau: payload.email,
+        ten_chung_thu_so_truoc: previousCurrent?.ten_chung_thu_so ?? null,
+        ten_chung_thu_so_sau: payload.ten_chung_thu_so,
+        to_chuc_truoc: previousCurrent?.to_chuc ?? null,
+        to_chuc_sau: payload.to_chuc,
+        thong_tin_chung_truoc: previousCurrent?.thong_tin_chung ?? null,
+        thong_tin_chung_sau: payload.thong_tin_chung,
+        ngay_hieu_luc_truoc: previousCurrent?.ngay_hieu_luc ?? null,
+        ngay_hieu_luc_sau: payload.ngay_hieu_luc,
+        ngay_het_hieu_luc_truoc: previousCurrent?.ngay_het_hieu_luc ?? null,
         ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
         ghi_chu: null,
       });
@@ -318,18 +450,179 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
     revalidatePath("/dashboard/bao-cao");
     revalidatePath("/dashboard/thiet-bi");
     revalidatePath("/dashboard");
-    return success(id ? "Đã cập nhật chứng thư số." : "Đã thêm chứng thư số.");
+    return success(
+      eventType === "gia_han"
+        ? "Đã gia hạn và tạo Serial CTS mới."
+        : eventType === "thay_doi_thong_tin"
+          ? "Đã ghi nhận thay đổi thông tin CTS."
+          : "Đã cấp mới CTS."
+    );
   } catch (error) {
     return failure(error);
   }
 }
 
-export async function revokeCertificateAction(id: number): Promise<ActionResult> {
+export async function importCertificatesAction(rows: EntityInput[]): Promise<ActionResult> {
+  const denied = await ensureActionAllowed();
+  if (denied) return denied;
+
+  try {
+    if (!rows.length) throw new Error("Không có dòng CTS nào để import.");
+    const supabase = await createClient();
+    const [devicesResult, staffResult, existingResult] = await Promise.all([
+      supabase.from("thiet_bi").select("id, ma_thiet_bi, nguoi_su_dung_id"),
+      supabase.from("nguoi_dung").select("id, ho_ten, email"),
+      supabase.from("thiet_bi_chung_thu_so").select("*"),
+    ]);
+
+    if (devicesResult.error) throw devicesResult.error;
+    if (staffResult.error) throw staffResult.error;
+    if (existingResult.error) throw existingResult.error;
+
+    const deviceMap = new Map(
+      (devicesResult.data ?? []).map((device) => [normalizeText(device.ma_thiet_bi), device])
+    );
+    const staffByEmail = new Map(
+      (staffResult.data ?? [])
+        .filter((staff) => staff.email)
+        .map((staff) => [normalizeText(staff.email), staff])
+    );
+    const staffByName = new Map(
+      (staffResult.data ?? []).map((staff) => [normalizeText(staff.ho_ten), staff])
+    );
+    const existingSerials = new Map(
+      (existingResult.data ?? []).map((item) => [normalizeText(item.so_hieu_chung_thu_so), item])
+    );
+
+    const readyRows = rows
+      .map((row) => {
+        const deviceCode = requiredText(row, "so_hieu_thiet_bi", "mã thiết bị");
+        const serial = requiredText(row, "so_hieu_chung_thu_so", "Serial CTS");
+        const device = deviceMap.get(normalizeText(deviceCode));
+        const staff =
+          staffByEmail.get(normalizeText(nullableText(row, "email") ?? "")) ??
+          staffByName.get(normalizeText(nullableText(row, "ten_chung_thu_so") ?? "")) ??
+          (device?.nguoi_su_dung_id
+            ? (staffResult.data ?? []).find((item) => item.id === device.nguoi_su_dung_id)
+            : null);
+        return { row, device, staff, serial };
+      })
+      .filter((item) => item.device && item.staff);
+
+    if (!readyRows.length) {
+      throw new Error("Không có dòng nào đủ điều kiện import. Cần khớp mã thiết bị và nhân sự trước.");
+    }
+
+    const grouped = new Map<number, typeof readyRows>();
+    for (const item of readyRows) {
+      const deviceId = item.device!.id;
+      const current = grouped.get(deviceId) ?? [];
+      current.push(item);
+      grouped.set(deviceId, current);
+    }
+
+    let imported = 0;
+    let skippedExisting = 0;
+
+    for (const [deviceId, group] of grouped) {
+      const sorted = [...group].sort((a, b) =>
+        String(a.row.ngay_hieu_luc ?? "").localeCompare(String(b.row.ngay_hieu_luc ?? ""))
+      );
+      await supabase
+        .from("thiet_bi_chung_thu_so")
+        .update({ la_hien_hanh: false })
+        .eq("thiet_bi_id", deviceId)
+        .eq("la_hien_hanh", true)
+        .is("thoi_diem_thu_hoi", null);
+
+      let previousId: number | null = null;
+      for (const [index, item] of sorted.entries()) {
+        const existing = existingSerials.get(normalizeText(item.serial));
+        const isLast = index === sorted.length - 1;
+        const certPayload: TablesInsert<"thiet_bi_chung_thu_so"> = {
+          thiet_bi_id: deviceId,
+          nguoi_su_dung_id: item.staff!.id,
+          so_hieu_chung_thu_so: item.serial,
+          email: nullableText(item.row, "email"),
+          ten_chung_thu_so: nullableText(item.row, "ten_chung_thu_so"),
+          loai_chung_thu_so: nullableText(item.row, "loai_chung_thu_so"),
+          to_chuc: nullableText(item.row, "to_chuc"),
+          thong_tin_chung: nullableText(item.row, "thong_tin_chung"),
+          id_chung_thu_so_nguon: nullableText(item.row, "id_chung_thu_so_nguon"),
+          ngay_hieu_luc: requiredText(item.row, "ngay_hieu_luc", "ngày hiệu lực"),
+          ngay_het_hieu_luc: requiredText(item.row, "ngay_het_hieu_luc", "ngày hết hạn"),
+          da_gia_han: !isLast,
+          la_hien_hanh: isLast,
+          chung_thu_goc_id: previousId,
+          ghi_chu: null,
+        };
+
+        const result = existing
+          ? await supabase
+              .from("thiet_bi_chung_thu_so")
+              .update(certPayload)
+              .eq("id", existing.id)
+              .select("*")
+              .single()
+          : await supabase
+              .from("thiet_bi_chung_thu_so")
+              .insert(certPayload)
+              .select("*")
+              .single();
+        if (result.error) throw result.error;
+
+        if (previousId) {
+          await supabase
+            .from("thiet_bi_chung_thu_so")
+            .update({ chung_thu_thay_the_id: result.data.id })
+            .eq("id", previousId);
+        }
+
+        if (!existing) {
+          const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+            thiet_bi_chung_thu_so_id: result.data.id,
+            thiet_bi_id: deviceId,
+            loai_su_kien: previousId ? "gia_han" : "cap_moi",
+            nguoi_su_dung_id_sau: item.staff!.id,
+            so_hieu_chung_thu_so_sau: item.serial,
+            email_sau: certPayload.email,
+            ten_chung_thu_so_sau: certPayload.ten_chung_thu_so,
+            to_chuc_sau: certPayload.to_chuc,
+            thong_tin_chung_sau: certPayload.thong_tin_chung,
+            ngay_hieu_luc_sau: certPayload.ngay_hieu_luc,
+            ngay_het_hieu_luc_sau: certPayload.ngay_het_hieu_luc,
+            ghi_chu: null,
+          });
+          if (historyError) throw historyError;
+          imported += 1;
+        } else {
+          skippedExisting += 1;
+        }
+
+        previousId = result.data.id;
+      }
+    }
+
+    const skipped = rows.length - readyRows.length;
+    revalidatePath("/dashboard/chung-thu-so");
+    revalidatePath("/dashboard/bao-cao");
+    revalidatePath("/dashboard");
+    return success(
+      `Đã import ${imported} CTS mới. ${skippedExisting} serial đã có được cập nhật. ${skipped} dòng chưa đủ điều kiện được bỏ qua.`
+    );
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function revokeCertificateAction(input: number | EntityInput): Promise<ActionResult> {
   const denied = await ensureActionAllowed();
   if (denied) return denied;
 
   try {
     const supabase = await createClient();
+    const id = typeof input === "number" ? input : requiredNumber(input, "id", "CTS cần thu hồi");
+    const reason = typeof input === "number" ? null : nullableText(input, "ly_do_thu_hoi");
     const { data: previous, error: previousError } = await supabase
       .from("thiet_bi_chung_thu_so")
       .select("*")
@@ -341,17 +634,23 @@ export async function revokeCertificateAction(id: number): Promise<ActionResult>
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("thiet_bi_chung_thu_so")
-      .update({ thoi_diem_thu_hoi: now })
+      .update({ thoi_diem_thu_hoi: now, ly_do_thu_hoi: reason, la_hien_hanh: false })
       .eq("id", id);
     if (error) throw error;
 
     const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+      thiet_bi_chung_thu_so_id: previous.id,
       thiet_bi_id: previous.thiet_bi_id,
       loai_su_kien: "thu_hoi",
       nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
       so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
+      email_truoc: previous.email,
+      ten_chung_thu_so_truoc: previous.ten_chung_thu_so,
+      to_chuc_truoc: previous.to_chuc,
+      thong_tin_chung_truoc: previous.thong_tin_chung,
       ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
       ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
+      ly_do_thu_hoi: reason,
       ghi_chu: null,
     });
     if (historyError) throw historyError;

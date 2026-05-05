@@ -24,25 +24,33 @@ type ReportFilters = {
 };
 
 const reportOptions = [
+  { value: "expiring", label: "Sắp hết hạn" },
+  { value: "renew", label: "Hết hạn chờ gia hạn" },
+  { value: "new", label: "Cần cấp mới" },
+  { value: "revoke", label: "Cần thu hồi" },
+  { value: "renewed", label: "Đã gia hạn" },
+  { value: "active", label: "Đang hiệu lực" },
   { value: "month", label: "Hết hạn trong tháng này" },
   { value: "quarter", label: "Hết hạn trong quý này" },
   { value: "year", label: "Hết hạn trong năm nay" },
-  { value: "renew", label: "Cần gia hạn" },
-  { value: "revoke", label: "Cần thu hồi" },
-  { value: "active", label: "Danh sách đang hiệu lực" },
   { value: "all", label: "Toàn bộ chứng thư" },
 ];
 
 const excelHeaders = [
-  "Số hiệu chứng thư",
+  "Serial CTS",
+  "ID CTS nguồn",
   "Mã thiết bị",
-  "Tên thiết bị",
-  "Loại thiết bị",
+  "Tên CTS",
+  "Email",
+  "Loại CTS",
+  "Tổ chức",
   "Người sử dụng",
   "Phòng ban",
   "Ngày hiệu lực",
   "Ngày hết hiệu lực",
   "Hạn gia hạn lần đầu",
+  "Đã gia hạn",
+  "Hiện hành",
   "Số ngày còn lại",
   "Trạng thái",
   "Ngày cần thu hồi",
@@ -82,14 +90,19 @@ export function CertificateReportClient({
       excelHeaders,
       ...rows.map((row) => [
         row.so_hieu_chung_thu_so ?? "",
+        row.id_chung_thu_so_nguon ?? "",
         row.so_hieu_thiet_bi ?? "",
-        row.ten_thiet_bi ?? "",
-        row.loai_thiet_bi ?? "",
+        row.ten_chung_thu_so ?? row.ten_thiet_bi ?? "",
+        row.email ?? "",
+        row.loai_chung_thu_so ?? row.loai_thiet_bi ?? "",
+        row.to_chuc ?? "",
         row.nguoi_su_dung ?? "",
         row.ten_phong_ban ?? "",
         formatDate(row.ngay_hieu_luc),
         formatDate(row.ngay_het_hieu_luc),
         formatDate(row.han_gia_han_lan_dau),
+        row.da_gia_han ? "Có" : "Không",
+        row.la_hien_hanh ? "Có" : "Không",
         row.so_ngay_con_lai ?? "",
         row.trang_thai ?? "",
         formatDate(row.ngay_can_thu_hoi),
@@ -122,7 +135,7 @@ export function CertificateReportClient({
             <Input
               value={filterState.q ?? ""}
               onChange={(event) => setFilterState((current) => ({ ...current, q: event.target.value }))}
-              placeholder="Tìm chứng thư, thiết bị, nhân sự..."
+              placeholder="Tìm Serial CTS, email, thiết bị..."
               className="pl-9"
             />
           </div>
@@ -196,17 +209,19 @@ export function CertificateReportClient({
       <section className="admin-panel overflow-hidden">
         {rows.length ? (
           <div className="overflow-x-auto">
-            <table className="admin-table min-w-[1240px]">
+            <table className="admin-table min-w-[1520px]">
               <thead>
                 <tr>
-                  <th>Số hiệu chứng thư</th>
+                  <th>Serial CTS</th>
                   <th>Thiết bị</th>
-                  <th>Người sử dụng</th>
-                  <th>Phòng ban</th>
-                  <th>Ngày hết hạn</th>
+                  <th>Tên CTS</th>
+                  <th>Email</th>
+                  <th>Loại</th>
+                  <th>Tổ chức</th>
+                  <th>Hiệu lực</th>
                   <th>Hạn gia hạn lần đầu</th>
+                  <th>Đã gia hạn</th>
                   <th>Còn lại</th>
-                  <th>Ngày cần thu hồi</th>
                   <th>Trạng thái</th>
                 </tr>
               </thead>
@@ -223,14 +238,21 @@ export function CertificateReportClient({
                         display(row.ten_thiet_bi)
                       )}
                     </td>
-                    <td>{display(row.nguoi_su_dung)}</td>
-                    <td>{display(row.ten_phong_ban)}</td>
-                    <td>{formatDate(row.ngay_het_hieu_luc)}</td>
+                    <td>{display(row.ten_chung_thu_so)}</td>
+                    <td>{display(row.email)}</td>
+                    <td>{display(row.loai_chung_thu_so ?? row.loai_thiet_bi)}</td>
+                    <td>{display(row.to_chuc)}</td>
+                    <td>
+                      <div className="space-y-1">
+                        <p>{formatDate(row.ngay_hieu_luc)}</p>
+                        <p className="text-xs text-slate-500">đến {formatDate(row.ngay_het_hieu_luc)}</p>
+                      </div>
+                    </td>
                     <td>{formatDate(row.han_gia_han_lan_dau)}</td>
+                    <td>{row.da_gia_han ? "Có" : "Không"}</td>
                     <td>
                       {row.so_ngay_con_lai == null ? "Không có dữ liệu" : `${row.so_ngay_con_lai} ngày`}
                     </td>
-                    <td>{formatDate(row.ngay_can_thu_hoi)}</td>
                     <td>
                       <CertificateStatusBadge status={row.trang_thai} />
                     </td>
