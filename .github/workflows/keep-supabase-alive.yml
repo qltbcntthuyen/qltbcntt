@@ -1,0 +1,32 @@
+name: Keep Supabase Alive
+
+# Ping database dinh ky de tranh Supabase Free tu pause sau 7 ngay khong hoat dong.
+# Chay moi 2 ngay luc 03:00 UTC (10:00 gio VN). Co the bam chay tay tu tab Actions.
+
+on:
+  schedule:
+    - cron: "0 3 */2 * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST (giu DB hoat dong)
+        run: |
+          echo "Pinging Supabase at $(date -u)"
+          HTTP_CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+            "${SUPABASE_URL}/rest/v1/loai_thiet_bi?select=id&limit=1" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}")
+          echo "HTTP status: ${HTTP_CODE}"
+          cat /tmp/resp.txt
+          if [ "${HTTP_CODE}" -ge 200 ] && [ "${HTTP_CODE}" -lt 500 ]; then
+            echo "Ping OK - database da ghi nhan hoat dong."
+          else
+            echo "Ping that bai voi status ${HTTP_CODE}"
+            exit 1
+          fi
+        env:
+          SUPABASE_URL: https://xllscywryfbabobngyez.supabase.co
+          SUPABASE_KEY: sb_publishable_OESPNlViWXOQejQ9DVpR6g_gKVXhS_x
