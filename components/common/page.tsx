@@ -78,9 +78,9 @@ export function CertificateStatusBadge({ status }: { status?: string | null }) {
       ? "green"
       : status === "sap_het_han"
         ? "amber"
-        : status === "da_gia_han" || status === "da_thay_the" || status === "da_thu_hoi"
+        : status === "da_gia_han" || status === "da_thu_hoi"
           ? "slate"
-          : status === "het_han" || status === "can_cap_moi" || status === "can_thu_hoi"
+          : status === "het_han" || status === "can_thu_hoi"
             ? "red"
             : status
               ? "red"

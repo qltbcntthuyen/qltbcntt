@@ -35,6 +35,7 @@ export type LookupData = {
   sources: Source[];
   staff: Staff[];
   devices: Device[];
+  computerConfigs: ComputerConfig[];
 };
 
 export type DeviceListItem = Device & {
@@ -45,6 +46,7 @@ export type DeviceListItem = Device & {
   nguon_goc: Source | null;
   tinh_trang: DeviceStatus | null;
   chung_thu: CertificateReportRow | null;
+  cau_hinh: ComputerConfig | null;
 };
 
 export type HandoverItem = Handover & {
@@ -55,6 +57,7 @@ export type HandoverItem = Handover & {
 
 export type MaintenanceItem = Maintenance & {
   thiet_bi: Device | null;
+  nguoi_su_dung: Staff | null;
 };
 
 export type StaffItem = Staff & {
@@ -132,6 +135,7 @@ export async function getLookups(): Promise<LookupData> {
     sources,
     staff,
     devices,
+    computerConfigs,
   ] = await Promise.all([
     supabase.from("phong_ban").select("*").order("ten_phong_ban"),
     supabase.from("loai_thiet_bi").select("*").order("ten_loai"),
@@ -142,6 +146,7 @@ export async function getLookups(): Promise<LookupData> {
     supabase.from("nguon_goc_tai_san").select("*").order("ten_nguon_goc"),
     supabase.from("nguoi_dung").select("*").order("ho_ten"),
     supabase.from("thiet_bi").select("*").order("ma_thiet_bi"),
+    supabase.from("cau_hinh_may_tinh").select("*"),
   ]);
 
   return {
@@ -154,6 +159,7 @@ export async function getLookups(): Promise<LookupData> {
     sources: sources.data ?? [],
     staff: staff.data ?? [],
     devices: devices.data ?? [],
+    computerConfigs: computerConfigs.data ?? [],
   };
 }
 
@@ -248,8 +254,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const certificateRows = certificates.data ?? [];
   const maintenanceRows = maintenance.data ?? [];
-  const renewalStatuses = ["het_han", "can_cap_moi"];
-  const actionStatuses = ["sap_het_han", "het_han", "can_cap_moi", "can_thu_hoi"];
+  const renewalStatuses = ["het_han"];
+  const actionStatuses = ["sap_het_han", "het_han", "can_thu_hoi"];
 
   return {
     metrics: {
@@ -284,6 +290,8 @@ export async function getDevices(filters: {
   tinhTrang?: string;
   nguoiDung?: string;
   chungThu?: string;
+  dapUngCds?: string;
+  thietBiMat?: string;
 }): Promise<{ rows: DeviceListItem[]; lookups: LookupData }> {
   if (!(await hasAdminAccess())) return { rows: [], lookups: emptyLookups() };
 
@@ -318,6 +326,10 @@ export async function getDevices(filters: {
       ) {
         return false;
       }
+      if (filters.dapUngCds === "yes" && !row.dap_ung_cds) return false;
+      if (filters.dapUngCds === "no" && row.dap_ung_cds) return false;
+      if (filters.thietBiMat === "yes" && !row.thiet_bi_mat) return false;
+      if (filters.thietBiMat === "no" && row.thiet_bi_mat) return false;
       return includesTerm(term, [
         row.ma_thiet_bi,
         row.ten_thiet_bi,
@@ -405,6 +417,8 @@ export async function getCertificates(filters: {
   q?: string;
   trangThai?: string;
   phongBan?: string;
+  hieuLucFrom?: string;
+  hieuLucTo?: string;
 }): Promise<{ rows: CertificateReportRow[]; lookups: LookupData }> {
   if (!(await hasAdminAccess())) return { rows: [], lookups: emptyLookups() };
 
@@ -418,6 +432,8 @@ export async function getCertificates(filters: {
   ]);
 
   const term = normalizeText(filters.q);
+  const fromDate = filters.hieuLucFrom ? new Date(filters.hieuLucFrom) : null;
+  const toDate = filters.hieuLucTo ? new Date(filters.hieuLucTo) : null;
   const rows = (result.data ?? []).filter((row) => {
     if (
       filters.trangThai &&
@@ -428,6 +444,12 @@ export async function getCertificates(filters: {
     }
     if (filters.phongBan && row.phong_ban_id !== Number(filters.phongBan)) {
       return false;
+    }
+    if (fromDate || toDate) {
+      const expiresAt = row.ngay_het_hieu_luc ? new Date(row.ngay_het_hieu_luc) : null;
+      if (!expiresAt) return false;
+      if (fromDate && expiresAt < fromDate) return false;
+      if (toDate && expiresAt > toDate) return false;
     }
     return includesTerm(term, [
       row.so_hieu_chung_thu_so,
@@ -537,7 +559,6 @@ export async function getPersonnel(filters: {
 
 export async function getReportRows(filters: {
   q?: string;
-  report?: string;
   phongBan?: string;
   trangThai?: string;
   from?: string;
@@ -549,34 +570,10 @@ export async function getReportRows(filters: {
     trangThai: filters.trangThai,
   });
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentQuarter = Math.floor(currentMonth / 3);
-  const currentYear = now.getFullYear();
-
   const filtered = rows.filter((row) => {
     const expiresAt = row.ngay_het_hieu_luc ? new Date(row.ngay_het_hieu_luc) : null;
     if (filters.from && expiresAt && expiresAt < new Date(filters.from)) return false;
     if (filters.to && expiresAt && expiresAt > new Date(filters.to)) return false;
-    if (filters.report === "month") {
-      return expiresAt?.getMonth() === currentMonth && expiresAt.getFullYear() === currentYear;
-    }
-    if (filters.report === "quarter") {
-      return (
-        expiresAt &&
-        Math.floor(expiresAt.getMonth() / 3) === currentQuarter &&
-        expiresAt.getFullYear() === currentYear
-      );
-    }
-    if (filters.report === "year") {
-      return expiresAt?.getFullYear() === currentYear;
-    }
-    if (filters.report === "expiring") return row.trang_thai === "sap_het_han";
-    if (filters.report === "renewed") return row.trang_thai === "da_gia_han";
-    if (filters.report === "new") return row.trang_thai === "can_cap_moi";
-    if (filters.report === "revoke") return row.trang_thai === "can_thu_hoi";
-    if (filters.report === "renew") return row.trang_thai === "het_han";
-    if (filters.report === "active") return row.trang_thai === "dang_hieu_luc";
     return true;
   });
 
@@ -584,30 +581,41 @@ export async function getReportRows(filters: {
     rows: filtered,
     lookups,
     summary: {
-      month: rows.filter((row) => {
-        const date = row.ngay_het_hieu_luc ? new Date(row.ngay_het_hieu_luc) : null;
-        return date?.getMonth() === currentMonth && date.getFullYear() === currentYear;
-      }).length,
-      quarter: rows.filter((row) => {
-        const date = row.ngay_het_hieu_luc ? new Date(row.ngay_het_hieu_luc) : null;
-        return (
-          date &&
-          Math.floor(date.getMonth() / 3) === currentQuarter &&
-          date.getFullYear() === currentYear
-        );
-      }).length,
-      year: rows.filter((row) => {
-        const date = row.ngay_het_hieu_luc ? new Date(row.ngay_het_hieu_luc) : null;
-        return date?.getFullYear() === currentYear;
-      }).length,
-      revoke: rows.filter((row) => row.trang_thai === "can_thu_hoi").length,
-      renew: rows.filter((row) => row.trang_thai === "het_han").length,
-      newIssue: rows.filter((row) => row.trang_thai === "can_cap_moi").length,
-      renewed: rows.filter((row) => row.trang_thai === "da_gia_han").length,
-      expiring: rows.filter((row) => row.trang_thai === "sap_het_han").length,
-      active: rows.filter((row) => row.trang_thai === "dang_hieu_luc").length,
+      revoke: filtered.filter((row) => row.trang_thai === "can_thu_hoi").length,
+      renew: filtered.filter((row) => row.trang_thai === "het_han").length,
+      renewed: filtered.filter((row) => row.trang_thai === "da_gia_han").length,
+      expiring: filtered.filter((row) => row.trang_thai === "sap_het_han").length,
+      active: filtered.filter((row) => row.trang_thai === "dang_hieu_luc").length,
     },
   };
+}
+
+export async function getSystemConfigValue<T = unknown>(key: string): Promise<T | null> {
+  if (!(await hasAdminAccess())) return null;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("he_thong_cau_hinh")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  if (!data) return null;
+  return data.value as T;
+}
+
+export async function getExpiryThresholdDays(): Promise<number> {
+  const value = await getSystemConfigValue<number>("cts_canh_bao_so_ngay");
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  return 30;
+}
+
+export async function getNextPersonnelCode(): Promise<string> {
+  if (!(await hasAdminAccess())) return "";
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("gen_ma_nhan_su");
+  if (error || !data) {
+    return "";
+  }
+  return String(data);
 }
 
 export async function getOperations(active: "ban-giao" | "bao-tri") {
@@ -697,6 +705,10 @@ function enrichDevices(
   const staffMap = byId(lookups.staff);
   const sourceMap = byId(lookups.sources);
   const statusMap = byId(lookups.statuses);
+  const configMap = new Map<number, ComputerConfig>();
+  for (const config of lookups.computerConfigs) {
+    configMap.set(config.thiet_bi_id, config);
+  }
   const certificateMap = new Map<number, CertificateReportRow>();
   const groupedCertificates = new Map<number, CertificateReportRow[]>();
 
@@ -721,6 +733,7 @@ function enrichDevices(
     nguon_goc: sourceMap.get(device.nguon_goc_id ?? -1) ?? null,
     tinh_trang: statusMap.get(device.tinh_trang_id ?? -1) ?? null,
     chung_thu: certificateMap.get(device.id) ?? null,
+    cau_hinh: configMap.get(device.id) ?? null,
   }));
 }
 
@@ -749,10 +762,15 @@ function enrichHandovers(rows: Handover[], lookups: LookupData): HandoverItem[] 
 
 function enrichMaintenance(rows: Maintenance[], lookups: LookupData): MaintenanceItem[] {
   const deviceMap = byId(lookups.devices);
-  return rows.map((row) => ({
-    ...row,
-    thiet_bi: deviceMap.get(row.thiet_bi_id) ?? null,
-  }));
+  const staffMap = byId(lookups.staff);
+  return rows.map((row) => {
+    const device = deviceMap.get(row.thiet_bi_id) ?? null;
+    return {
+      ...row,
+      thiet_bi: device,
+      nguoi_su_dung: device?.nguoi_su_dung_id != null ? staffMap.get(device.nguoi_su_dung_id) ?? null : null,
+    };
+  });
 }
 
 function emptyLookups(): LookupData {
@@ -766,6 +784,7 @@ function emptyLookups(): LookupData {
     sources: [],
     staff: [],
     devices: [],
+    computerConfigs: [],
   };
 }
 

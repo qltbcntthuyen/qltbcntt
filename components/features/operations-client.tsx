@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Plus, RotateCcw, Search, Trash2, Wrench } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import {
   deleteHandoverAction,
@@ -13,12 +13,16 @@ import {
   type EntityInput,
 } from "@/app/actions/mutations";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { CurrencyInput } from "@/components/ui/currency-input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Pagination, paginate } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { MAINTENANCE_TYPES } from "@/lib/constants";
 import type { HandoverItem, LookupData, MaintenanceItem } from "@/lib/data";
 import { display, formatCurrency, formatDate, normalizeText, todayInputValue } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -37,7 +41,6 @@ const emptyHandover: EntityInput = {
   nguoi_nhan_id: "",
   phong_ban_nhan_id: "",
   ngay_ban_giao: todayInputValue(),
-  ngay_thu_hoi: "",
   hinh_thuc: "Bàn giao sử dụng",
   noi_dung: "",
 };
@@ -60,7 +63,6 @@ function handoverToInput(row: HandoverItem): EntityInput {
     nguoi_nhan_id: row.nguoi_nhan_id ?? "",
     phong_ban_nhan_id: row.phong_ban_nhan_id ?? "",
     ngay_ban_giao: row.ngay_ban_giao,
-    ngay_thu_hoi: row.ngay_thu_hoi ?? "",
     hinh_thuc: row.hinh_thuc ?? "",
     noi_dung: row.noi_dung ?? "",
   };
@@ -90,7 +92,10 @@ export function OperationsClient({ data }: { data: OperationsData }) {
   const [deleteMaintenance, setDeleteMaintenance] = useState<MaintenanceItem | null>(null);
   const [filter, setFilter] = useState({ q: "", status: "all" });
   const [message, setMessage] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
+
   const filteredHandovers = data.handovers.filter((row) => {
     const q = normalizeText(filter.q);
     const matchesText =
@@ -103,10 +108,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         row.hinh_thuc,
         row.noi_dung,
       ].some((value) => normalizeText(String(value ?? "")).includes(q));
-    if (!matchesText) return false;
-    if (filter.status === "dang_ban_giao") return !row.ngay_thu_hoi;
-    if (filter.status === "da_thu_hoi") return Boolean(row.ngay_thu_hoi);
-    return true;
+    return matchesText;
   });
   const filteredMaintenance = data.maintenance.filter((row) => {
     const q = normalizeText(filter.q);
@@ -125,6 +127,13 @@ export function OperationsClient({ data }: { data: OperationsData }) {
     if (filter.status === "da_xu_ly") return Boolean(row.ket_qua_xu_ly);
     return true;
   });
+
+  const activeRows: Array<HandoverItem | MaintenanceItem> =
+    data.active === "ban-giao" ? filteredHandovers : filteredMaintenance;
+  const pageRows = paginate<HandoverItem | MaintenanceItem>(activeRows, page, pageSize);
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(activeRows.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+  const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function setField(key: string, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -211,23 +220,18 @@ export function OperationsClient({ data }: { data: OperationsData }) {
               className="pl-9"
             />
           </div>
-          <Select
-            value={filter.status}
-            onChange={(event) => setFilter((current) => ({ ...current, status: event.target.value }))}
-          >
-            <option value="all">Tất cả trạng thái</option>
-            {data.active === "ban-giao" ? (
-              <>
-                <option value="dang_ban_giao">Đang bàn giao</option>
-                <option value="da_thu_hoi">Đã thu hồi</option>
-              </>
-            ) : (
-              <>
-                <option value="dang_xu_ly">Đang xử lý</option>
-                <option value="da_xu_ly">Đã xử lý</option>
-              </>
-            )}
-          </Select>
+          {data.active === "bao-tri" ? (
+            <Select
+              value={filter.status}
+              onChange={(event) => setFilter((current) => ({ ...current, status: event.target.value }))}
+            >
+              <option value="all">Tất cả trạng thái</option>
+              <option value="dang_xu_ly">Đang xử lý</option>
+              <option value="da_xu_ly">Đã xử lý</option>
+            </Select>
+          ) : (
+            <span />
+          )}
           <Button type="button" variant="outline" onClick={() => setFilter({ q: "", status: "all" })}>
             <RotateCcw className="size-4" />
             Đặt lại
@@ -243,7 +247,8 @@ export function OperationsClient({ data }: { data: OperationsData }) {
 
       {data.active === "ban-giao" ? (
         <HandoverTable
-          rows={filteredHandovers}
+          rows={pageRows as HandoverItem[]}
+          baseIndex={baseIndex}
           onEdit={(row) => {
             setMessage(null);
             setForm(handoverToInput(row));
@@ -253,7 +258,8 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         />
       ) : (
         <MaintenanceTable
-          rows={filteredMaintenance}
+          rows={pageRows as MaintenanceItem[]}
+          baseIndex={baseIndex}
           onEdit={(row) => {
             setMessage(null);
             setForm(maintenanceToInput(row));
@@ -262,6 +268,17 @@ export function OperationsClient({ data }: { data: OperationsData }) {
           onDelete={setDeleteMaintenance}
         />
       )}
+
+      <Pagination
+        total={activeRows.length}
+        page={safePage}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
 
       <Modal
         open={dialogOpen}
@@ -276,7 +293,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
         }
         description={
           data.active === "ban-giao"
-            ? "Ghi nhận thiết bị, người nhận và đơn vị nhận để cập nhật trạng thái sử dụng."
+            ? "Chọn thiết bị, người nhận và mô tả tình trạng thiết bị bàn giao."
             : "Ghi nhận lỗi, phương án xử lý, chi phí và đơn vị sửa chữa nếu có."
         }
         onClose={() => setDialogOpen(false)}
@@ -320,10 +337,12 @@ export function OperationsClient({ data }: { data: OperationsData }) {
 
 function HandoverTable({
   rows,
+  baseIndex,
   onEdit,
   onDelete,
 }: {
   rows: HandoverItem[];
+  baseIndex: number;
   onEdit: (row: HandoverItem) => void;
   onDelete: (row: HandoverItem) => void;
 }) {
@@ -334,29 +353,32 @@ function HandoverTable({
           <table className="admin-table min-w-[1080px]">
             <thead>
               <tr>
+                <th className="w-12">STT</th>
                 <th>Ngày bàn giao</th>
                 <th>Thiết bị</th>
                 <th>Người nhận</th>
                 <th>Phòng ban nhận</th>
                 <th>Hình thức</th>
-                <th>Ngày thu hồi</th>
-                <th>Nội dung</th>
+                <th>Tình trạng thiết bị bàn giao</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <tr key={row.id}>
+                  <td className="text-slate-500">{baseIndex + index + 1}</td>
                   <td>{formatDate(row.ngay_ban_giao)}</td>
                   <td>
-                    <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      href={`/dashboard/thiet-bi/${row.thiet_bi_id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {row.thiet_bi?.ma_thiet_bi ?? row.thiet_bi_id} - {display(row.thiet_bi?.ten_thiet_bi)}
                     </Link>
                   </td>
                   <td>{display(row.nguoi_nhan?.ho_ten)}</td>
                   <td>{display(row.phong_ban_nhan?.ten_phong_ban)}</td>
                   <td>{display(row.hinh_thuc)}</td>
-                  <td>{formatDate(row.ngay_thu_hoi)}</td>
                   <td>{display(row.noi_dung)}</td>
                   <td>
                     <div className="flex flex-wrap gap-2">
@@ -376,7 +398,10 @@ function HandoverTable({
         </div>
       ) : (
         <div className="p-5">
-          <EmptyState title="Chưa có lịch sử bàn giao" description="Lập bàn giao để theo dõi ai đang sử dụng thiết bị nào." />
+          <EmptyState
+            title="Chưa có lịch sử bàn giao"
+            description="Lập bàn giao để theo dõi ai đang sử dụng thiết bị nào."
+          />
         </div>
       )}
     </section>
@@ -385,10 +410,12 @@ function HandoverTable({
 
 function MaintenanceTable({
   rows,
+  baseIndex,
   onEdit,
   onDelete,
 }: {
   rows: MaintenanceItem[];
+  baseIndex: number;
   onEdit: (row: MaintenanceItem) => void;
   onDelete: (row: MaintenanceItem) => void;
 }) {
@@ -396,9 +423,10 @@ function MaintenanceTable({
     <section className="admin-panel overflow-hidden">
       {rows.length ? (
         <div className="overflow-x-auto">
-          <table className="admin-table min-w-[1120px]">
+          <table className="admin-table min-w-[1180px]">
             <thead>
               <tr>
+                <th className="w-12">STT</th>
                 <th>Ngày ghi nhận</th>
                 <th>Thiết bị</th>
                 <th>Loại xử lý</th>
@@ -411,11 +439,15 @@ function MaintenanceTable({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row, index) => (
                 <tr key={row.id}>
+                  <td className="text-slate-500">{baseIndex + index + 1}</td>
                   <td>{formatDate(row.ngay_ghi_nhan)}</td>
                   <td>
-                    <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                    <Link
+                      href={`/dashboard/thiet-bi/${row.thiet_bi_id}`}
+                      className="font-medium text-primary hover:underline"
+                    >
                       {row.thiet_bi?.ma_thiet_bi ?? row.thiet_bi_id} - {display(row.thiet_bi?.ten_thiet_bi)}
                     </Link>
                   </td>
@@ -443,11 +475,56 @@ function MaintenanceTable({
         </div>
       ) : (
         <div className="p-5">
-          <EmptyState title="Chưa có bảo trì, sửa chữa" description="Ghi nhận lỗi hoặc bảo trì định kỳ để theo dõi xử lý." />
+          <EmptyState
+            title="Chưa có bảo trì, sửa chữa"
+            description="Ghi nhận lỗi hoặc bảo trì định kỳ để theo dõi xử lý."
+          />
         </div>
       )}
     </section>
   );
+}
+
+function deviceOptions(lookups: LookupData): ComboboxOption[] {
+  const staffMap = new Map(lookups.staff.map((item) => [item.id, item]));
+  const departmentMap = new Map(lookups.departments.map((item) => [item.id, item]));
+  const typeMap = new Map(lookups.deviceTypes.map((item) => [item.id, item]));
+  return lookups.devices.map((device) => {
+    const user = device.nguoi_su_dung_id ? staffMap.get(device.nguoi_su_dung_id) : null;
+    const department = device.phong_ban_id ? departmentMap.get(device.phong_ban_id) : null;
+    const type = typeMap.get(device.loai_thiet_bi_id);
+    const descriptionParts = [
+      type?.ten_loai,
+      user?.ho_ten ?? "Chưa phân công",
+      department?.ten_phong_ban ?? "—",
+    ].filter(Boolean);
+    return {
+      value: String(device.id),
+      label: `${device.ma_thiet_bi} - ${device.ten_thiet_bi}`,
+      description: descriptionParts.join(" · "),
+      searchText: [
+        device.serial,
+        type?.ten_loai,
+        user?.ho_ten,
+        department?.ten_phong_ban,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    } satisfies ComboboxOption;
+  });
+}
+
+function staffOptions(lookups: LookupData): ComboboxOption[] {
+  const departmentMap = new Map(lookups.departments.map((item) => [item.id, item]));
+  return lookups.staff.map((staff) => {
+    const department = staff.phong_ban_id ? departmentMap.get(staff.phong_ban_id) : null;
+    return {
+      value: String(staff.id),
+      label: staff.ho_ten,
+      description: [staff.ten_dang_nhap, department?.ten_phong_ban].filter(Boolean).join(" · "),
+      searchText: [staff.email, staff.ten_dang_nhap, department?.ten_phong_ban].filter(Boolean).join(" "),
+    } satisfies ComboboxOption;
+  });
 }
 
 function HandoverForm({
@@ -459,16 +536,32 @@ function HandoverForm({
   lookups: LookupData;
   setField: (key: string, value: string) => void;
 }) {
+  const devices = useMemo(() => deviceOptions(lookups), [lookups]);
+  const staff = useMemo(() => staffOptions(lookups), [lookups]);
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="Thiết bị" required>
-        <DeviceSelect value={String(form.thiet_bi_id ?? "")} lookups={lookups} onChange={(value) => setField("thiet_bi_id", value)} />
+      <Field label="Thiết bị" required className="md:col-span-2">
+        <Combobox
+          options={devices}
+          value={String(form.thiet_bi_id ?? "")}
+          onChange={(value) => setField("thiet_bi_id", value)}
+          placeholder="Tìm theo mã, tên, người dùng, phòng ban..."
+        />
       </Field>
       <Field label="Người nhận">
-        <StaffSelect value={String(form.nguoi_nhan_id ?? "")} lookups={lookups} onChange={(value) => setField("nguoi_nhan_id", value)} />
+        <Combobox
+          options={staff}
+          value={String(form.nguoi_nhan_id ?? "")}
+          onChange={(value) => setField("nguoi_nhan_id", value)}
+          placeholder="Chọn nhân sự"
+        />
       </Field>
       <Field label="Phòng ban nhận">
-        <Select value={String(form.phong_ban_nhan_id ?? "")} onChange={(e) => setField("phong_ban_nhan_id", e.target.value)}>
+        <Select
+          value={String(form.phong_ban_nhan_id ?? "")}
+          onChange={(e) => setField("phong_ban_nhan_id", e.target.value)}
+        >
           <option value="">Chưa chọn</option>
           {lookups.departments.map((item) => (
             <option key={item.id} value={item.id}>
@@ -478,16 +571,21 @@ function HandoverForm({
         </Select>
       </Field>
       <Field label="Ngày bàn giao" required>
-        <Input type="date" value={String(form.ngay_ban_giao ?? "")} onChange={(e) => setField("ngay_ban_giao", e.target.value)} />
-      </Field>
-      <Field label="Ngày thu hồi">
-        <Input type="date" value={String(form.ngay_thu_hoi ?? "")} onChange={(e) => setField("ngay_thu_hoi", e.target.value)} />
+        <Input
+          type="date"
+          value={String(form.ngay_ban_giao ?? "")}
+          onChange={(e) => setField("ngay_ban_giao", e.target.value)}
+        />
       </Field>
       <Field label="Hình thức">
         <Input value={String(form.hinh_thuc ?? "")} onChange={(e) => setField("hinh_thuc", e.target.value)} />
       </Field>
-      <Field label="Nội dung" className="md:col-span-2">
-        <Textarea value={String(form.noi_dung ?? "")} onChange={(e) => setField("noi_dung", e.target.value)} />
+      <Field label="Tình trạng thiết bị bàn giao" className="md:col-span-2">
+        <Textarea
+          value={String(form.noi_dung ?? "")}
+          onChange={(e) => setField("noi_dung", e.target.value)}
+          placeholder="Mô tả tình trạng thiết bị tại thời điểm bàn giao (ngoại quan, phụ kiện, cài đặt...)"
+        />
       </Field>
     </div>
   );
@@ -502,81 +600,64 @@ function MaintenanceForm({
   lookups: LookupData;
   setField: (key: string, value: string) => void;
 }) {
+  const devices = useMemo(() => deviceOptions(lookups), [lookups]);
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="Thiết bị" required>
-        <DeviceSelect value={String(form.thiet_bi_id ?? "")} lookups={lookups} onChange={(value) => setField("thiet_bi_id", value)} />
+      <Field label="Thiết bị" required className="md:col-span-2">
+        <Combobox
+          options={devices}
+          value={String(form.thiet_bi_id ?? "")}
+          onChange={(value) => setField("thiet_bi_id", value)}
+          placeholder="Tìm theo mã, tên, người dùng, phòng ban..."
+        />
       </Field>
       <Field label="Ngày ghi nhận" required>
-        <Input type="date" value={String(form.ngay_ghi_nhan ?? "")} onChange={(e) => setField("ngay_ghi_nhan", e.target.value)} />
+        <Input
+          type="date"
+          value={String(form.ngay_ghi_nhan ?? "")}
+          onChange={(e) => setField("ngay_ghi_nhan", e.target.value)}
+        />
       </Field>
       <Field label="Ngày sửa chữa">
-        <Input type="date" value={String(form.ngay_sua_chua ?? "")} onChange={(e) => setField("ngay_sua_chua", e.target.value)} />
+        <Input
+          type="date"
+          value={String(form.ngay_sua_chua ?? "")}
+          onChange={(e) => setField("ngay_sua_chua", e.target.value)}
+        />
       </Field>
       <Field label="Loại xử lý">
         <Select value={String(form.loai_xu_ly ?? "")} onChange={(e) => setField("loai_xu_ly", e.target.value)}>
           <option value="">Chưa chọn</option>
-          <option value="Bảo trì">Bảo trì</option>
-          <option value="Sửa chữa">Sửa chữa</option>
-          <option value="Thay thế linh kiện">Thay thế linh kiện</option>
-          <option value="Kiểm tra định kỳ">Kiểm tra định kỳ</option>
+          {MAINTENANCE_TYPES.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
         </Select>
       </Field>
-      <Field label="Chi phí">
-        <Input type="number" min="0" value={String(form.chi_phi ?? "")} onChange={(e) => setField("chi_phi", e.target.value)} />
+      <Field label="Chi phí (VND)">
+        <CurrencyInput
+          value={String(form.chi_phi ?? "")}
+          onValueChange={(value) => setField("chi_phi", value)}
+        />
       </Field>
       <Field label="Đơn vị sửa chữa">
-        <Input value={String(form.don_vi_sua_chua ?? "")} onChange={(e) => setField("don_vi_sua_chua", e.target.value)} />
+        <Input
+          value={String(form.don_vi_sua_chua ?? "")}
+          onChange={(e) => setField("don_vi_sua_chua", e.target.value)}
+        />
       </Field>
       <Field label="Mô tả lỗi" className="md:col-span-2">
         <Textarea value={String(form.mo_ta_loi ?? "")} onChange={(e) => setField("mo_ta_loi", e.target.value)} />
       </Field>
       <Field label="Kết quả xử lý" className="md:col-span-2">
-        <Textarea value={String(form.ket_qua_xu_ly ?? "")} onChange={(e) => setField("ket_qua_xu_ly", e.target.value)} />
+        <Textarea
+          value={String(form.ket_qua_xu_ly ?? "")}
+          onChange={(e) => setField("ket_qua_xu_ly", e.target.value)}
+        />
       </Field>
     </div>
-  );
-}
-
-function DeviceSelect({
-  value,
-  lookups,
-  onChange,
-}: {
-  value: string;
-  lookups: LookupData;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Chọn thiết bị</option>
-      {lookups.devices.map((item) => (
-        <option key={item.id} value={item.id}>
-          {item.ma_thiet_bi} - {item.ten_thiet_bi}
-        </option>
-      ))}
-    </Select>
-  );
-}
-
-function StaffSelect({
-  value,
-  lookups,
-  onChange,
-}: {
-  value: string;
-  lookups: LookupData;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Select value={value} onChange={(e) => onChange(e.target.value)}>
-      <option value="">Chọn nhân sự</option>
-      {lookups.staff.map((item) => (
-        <option key={item.id} value={item.id}>
-          {item.ho_ten}
-        </option>
-      ))}
-    </Select>
   );
 }
 

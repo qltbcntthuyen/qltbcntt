@@ -67,6 +67,7 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
     man_hinh: detail.config?.man_hinh ?? "",
     he_dieu_hanh_id: detail.config?.he_dieu_hanh_id ?? "",
     phan_mem_diet_virus_id: detail.config?.phan_mem_diet_virus_id ?? "",
+    ghi_chu: detail.config?.ghi_chu ?? "",
   });
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -120,11 +121,13 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
               <div className="mt-1 flex flex-wrap gap-2">
                 {device.la_thiet_bi_dung_chung ? <Badge tone="blue">Dùng chung</Badge> : null}
                 {device.thiet_bi_mat ? <Badge tone="red">Thiết bị mật</Badge> : null}
-                {!device.la_thiet_bi_dung_chung && !device.thiet_bi_mat ? (
+                {device.dap_ung_cds ? <Badge tone="green">Đáp ứng CĐS</Badge> : null}
+                {!device.la_thiet_bi_dung_chung && !device.thiet_bi_mat && !device.dap_ung_cds ? (
                   <Badge tone="slate">Thiết bị thường</Badge>
                 ) : null}
               </div>
             </div>
+            {device.ghi_chu ? <Info label="Ghi chú" value={device.ghi_chu} /> : null}
           </div>
         </Panel>
 
@@ -220,6 +223,13 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
                 </option>
               ))}
             </Select>
+          </Field>
+          <Field label="Ghi chú kỹ thuật" className="md:col-span-2 xl:col-span-3">
+            <Input
+              value={String(form.ghi_chu ?? "")}
+              onChange={(e) => setField("ghi_chu", e.target.value)}
+              placeholder="Cấu hình bổ sung, lưu ý cài đặt..."
+            />
           </Field>
         </div>
         <div className="mt-4 flex justify-end">

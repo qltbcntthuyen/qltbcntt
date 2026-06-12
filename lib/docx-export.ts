@@ -1,7 +1,7 @@
 import type { CertificateDocumentConfig, CertificateReportRow } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 
-type ExportMode = "04" | "05";
+type ExportMode = "04" | "05" | "dang_su_dung";
 
 const encoder = new TextEncoder();
 
@@ -159,15 +159,19 @@ function buildBody(mode: ExportMode, rows: CertificateReportRow[], config: Certi
   body.push(paragraph(agency.toUpperCase(), { center: true, bold: true }));
   body.push(paragraph(`Số: ${number}`, { center: true }));
   body.push(paragraph(`${place}, ngày ${today}`, { center: true }));
-  body.push(paragraph(mode === "04" ? "MẪU SỐ 04" : "MẪU SỐ 05", { center: true, bold: true }));
-  body.push(
-    paragraph(
-      mode === "04"
-        ? "DANH SÁCH ĐỀ NGHỊ GIA HẠN / THAY ĐỔI THÔNG TIN CHỨNG THƯ SỐ"
-        : "DANH SÁCH ĐỀ NGHỊ THU HỒI CHỨNG THƯ SỐ",
-      { center: true, bold: true }
-    )
-  );
+  if (mode === "dang_su_dung") {
+    body.push(paragraph("DANH SÁCH CHỨNG THƯ SỐ ĐANG SỬ DỤNG", { center: true, bold: true }));
+  } else {
+    body.push(paragraph(mode === "04" ? "MẪU SỐ 04" : "MẪU SỐ 05", { center: true, bold: true }));
+    body.push(
+      paragraph(
+        mode === "04"
+          ? "DANH SÁCH ĐỀ NGHỊ GIA HẠN / THAY ĐỔI THÔNG TIN CHỨNG THƯ SỐ"
+          : "DANH SÁCH ĐỀ NGHỊ THU HỒI CHỨNG THƯ SỐ",
+        { center: true, bold: true }
+      )
+    );
+  }
   body.push(paragraph(""));
   if (contact) {
     body.push(paragraph(`Đầu mối xử lý: ${contact}`));
@@ -198,7 +202,7 @@ function buildBody(mode: ExportMode, rows: CertificateReportRow[], config: Certi
         ])
       )
     );
-  } else {
+  } else if (mode === "05") {
     body.push(
       table(
         ["STT", "Tên CTS", "Email", "Serial CTS", "Mã thiết bị", "Lý do thu hồi"],
@@ -209,6 +213,27 @@ function buildBody(mode: ExportMode, rows: CertificateReportRow[], config: Certi
           row.so_hieu_chung_thu_so ?? "",
           row.so_hieu_thiet_bi ?? "",
           row.ly_do_thu_hoi ?? "................................",
+        ])
+      )
+    );
+  } else {
+    body.push(
+      table(
+        [
+          "STT",
+          "Tên CTS",
+          "Mã thiết bị",
+          "Serial CTS",
+          "Email",
+          "Thời hạn",
+        ],
+        rows.map((row, index) => [
+          String(index + 1),
+          row.ten_chung_thu_so ?? row.nguoi_su_dung ?? "",
+          row.so_hieu_thiet_bi ?? "",
+          row.so_hieu_chung_thu_so ?? "",
+          row.email ?? "",
+          `${formatDate(row.ngay_hieu_luc)} - ${formatDate(row.ngay_het_hieu_luc)}`,
         ])
       )
     );

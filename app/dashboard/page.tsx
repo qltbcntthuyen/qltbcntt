@@ -15,7 +15,7 @@ import {
 import { CertificateStatusBadge, PageHeader } from "@/components/common/page";
 import { buttonVariants } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import { getDashboardData } from "@/lib/data";
+import { getDashboardData, getExpiryThresholdDays } from "@/lib/data";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -30,6 +30,7 @@ const quickActions = [
 
 export default async function DashboardPage() {
   const data = await getDashboardData();
+  const thresholdDays = await getExpiryThresholdDays();
   const issueCount =
     data.metrics.unassignedDevices +
     data.metrics.expiringCertificates +
@@ -119,6 +120,19 @@ export default async function DashboardPage() {
           </Link>
         }
       />
+
+      {data.metrics.expiringCertificates > 0 ? (
+        <Link
+          href="/dashboard/chung-thu-so?trangThai=sap_het_han"
+          className="mb-5 flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 transition hover:bg-amber-100"
+        >
+          <ShieldAlert className="size-5 shrink-0 text-amber-600" />
+          <span>
+            Có <strong>{data.metrics.expiringCertificates}</strong> chứng thư số sẽ hết hạn trong{" "}
+            <strong>{thresholdDays}</strong> ngày tới. Nhấn để xem và gia hạn kịp thời.
+          </span>
+        </Link>
+      ) : null}
 
       <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
         <Panel title="Việc cần xử lý" description={`${issueCount} đầu việc cần kiểm tra trong hệ thống.`}>

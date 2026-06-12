@@ -14,7 +14,6 @@ export default async function DevicesPage({
     phongBan: params.phongBan,
     tinhTrang: params.tinhTrang,
     nguoiDung: params.nguoiDung,
-    chungThu: params.chungThu,
   });
 
   return (

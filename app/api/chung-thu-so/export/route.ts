@@ -11,23 +11,27 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const mode = url.searchParams.get("mau") === "05" ? "05" : "04";
+  const param = url.searchParams.get("mau") ?? "dang_su_dung";
+  const mode: "04" | "05" | "dang_su_dung" =
+    param === "04" ? "04" : param === "05" ? "05" : "dang_su_dung";
   const ids = (url.searchParams.get("ids") ?? "")
     .split(",")
     .map((value) => Number(value.trim()))
     .filter((value) => Number.isFinite(value) && value > 0);
 
-  if (!ids.length) {
-    return NextResponse.json({ message: "Chưa chọn CTS để xuất." }, { status: 400 });
-  }
-
   const supabase = await createClient();
   const [rowsResult, configResult] = await Promise.all([
-    supabase
-      .from("v_bao_cao_chung_thu_so")
-      .select("*")
-      .in("thiet_bi_chung_thu_so_id", ids)
-      .order("so_hieu_thiet_bi"),
+    ids.length
+      ? supabase
+          .from("v_bao_cao_chung_thu_so")
+          .select("*")
+          .in("thiet_bi_chung_thu_so_id", ids)
+          .order("so_hieu_thiet_bi")
+      : supabase
+          .from("v_bao_cao_chung_thu_so")
+          .select("*")
+          .in("trang_thai", ["dang_hieu_luc", "sap_het_han"])
+          .order("so_hieu_thiet_bi"),
     supabase
       .from("cau_hinh_van_ban_chung_thu_so")
       .select("*")
@@ -40,7 +44,12 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: rowsResult.error.message }, { status: 500 });
   }
 
-  const rows = rowsResult.data ?? [];
+  let rows = rowsResult.data ?? [];
+  if (mode === "dang_su_dung") {
+    rows = rows.filter(
+      (row) => row.trang_thai === "dang_hieu_luc" || row.trang_thai === "sap_het_han"
+    );
+  }
   if (!rows.length) {
     return NextResponse.json({ message: "Không tìm thấy CTS phù hợp." }, { status: 404 });
   }
@@ -51,7 +60,10 @@ export async function GET(request: Request) {
     config: configResult.data ?? null,
   });
   const date = new Date().toISOString().slice(0, 10);
-  const fileName = `mau-${mode}-chung-thu-so-${date}.docx`;
+  const fileName =
+    mode === "dang_su_dung"
+      ? `danh-sach-cts-dang-su-dung-${date}.docx`
+      : `mau-${mode}-chung-thu-so-${date}.docx`;
 
   return new Response(body, {
     headers: {

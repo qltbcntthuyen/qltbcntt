@@ -84,9 +84,18 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
   try {
     const supabase = await createClient();
     const id = idValue(input);
+    let maHoSo = toOptionalString(String(input.ten_dang_nhap ?? ""));
+    if (!id && !maHoSo) {
+      const { data: generated, error: genError } = await supabase.rpc("gen_ma_nhan_su");
+      if (genError) throw genError;
+      if (generated) maHoSo = String(generated);
+    }
+    if (!maHoSo) {
+      throw new Error("Không thể sinh mã hồ sơ. Vui lòng thử lại.");
+    }
     const payload = {
       ho_ten: requiredText(input, "ho_ten", "họ tên"),
-      ten_dang_nhap: requiredText(input, "ten_dang_nhap", "mã hồ sơ"),
+      ten_dang_nhap: maHoSo,
       email: nullableText(input, "email"),
       so_dien_thoai: nullableText(input, "so_dien_thoai"),
       phong_ban_id: nullableNumber(input, "phong_ban_id"),
@@ -103,7 +112,7 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
     revalidatePath("/dashboard/nhan-su");
     revalidatePath("/dashboard/phong-ban");
     revalidatePath("/dashboard", "layout");
-    return success(id ? "Đã cập nhật nhân sự." : "Đã thêm nhân sự.");
+    return success(id ? "Đã cập nhật nhân sự." : `Đã thêm nhân sự (${maHoSo}).`);
   } catch (error) {
     return failure(error);
   }
@@ -141,7 +150,9 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
       nguoi_su_dung_id: nullableNumber(input, "nguoi_su_dung_id"),
       la_thiet_bi_dung_chung: boolValue(input, "la_thiet_bi_dung_chung", false),
       thiet_bi_mat: boolValue(input, "thiet_bi_mat", false),
-      ghi_chu: null,
+      dap_ung_cds: boolValue(input, "dap_ung_cds", false),
+      nhom_cds: nullableText(input, "nhom_cds"),
+      ghi_chu: nullableText(input, "ghi_chu"),
     };
 
     const result = id
@@ -158,6 +169,7 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
       "man_hinh",
       "he_dieu_hanh_id",
       "phan_mem_diet_virus_id",
+      "ghi_chu_ky_thuat",
     ].some((key) => hasInputValue(input, key));
 
     if (savedId && hasComputerConfig) {
@@ -170,7 +182,7 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
         man_hinh: nullableText(input, "man_hinh"),
         he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
         phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
-        ghi_chu: null,
+        ghi_chu: nullableText(input, "ghi_chu_ky_thuat"),
       };
       const { error: configError } = await supabase
         .from("cau_hinh_may_tinh")
@@ -215,7 +227,7 @@ export async function saveComputerConfigAction(input: EntityInput): Promise<Acti
       man_hinh: nullableText(input, "man_hinh"),
       he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
       phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
-      ghi_chu: null,
+      ghi_chu: nullableText(input, "ghi_chu"),
     };
 
     const { error } = await supabase
@@ -308,7 +320,6 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         thong_tin_chung_truoc: previous.thong_tin_chung,
         thong_tin_chung_sau: payload.thong_tin_chung,
         noi_dung_thay_doi: nullableText(input, "noi_dung_thay_doi"),
-        thong_tin_moi: nullableText(input, "thong_tin_moi"),
         ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
         ngay_hieu_luc_sau: payload.ngay_hieu_luc,
         ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
@@ -623,6 +634,8 @@ export async function revokeCertificateAction(input: number | EntityInput): Prom
     const supabase = await createClient();
     const id = typeof input === "number" ? input : requiredNumber(input, "id", "CTS cần thu hồi");
     const reason = typeof input === "number" ? null : nullableText(input, "ly_do_thu_hoi");
+    const customRevokeAt =
+      typeof input === "number" ? null : nullableText(input, "thoi_diem_thu_hoi");
     const { data: previous, error: previousError } = await supabase
       .from("thiet_bi_chung_thu_so")
       .select("*")
@@ -631,10 +644,16 @@ export async function revokeCertificateAction(input: number | EntityInput): Prom
     if (previousError) throw previousError;
     if (!previous) throw new Error("Không tìm thấy chứng thư cần thu hồi.");
 
-    const now = new Date().toISOString();
+    let revokeAt = new Date().toISOString();
+    if (customRevokeAt) {
+      const parsed = new Date(customRevokeAt);
+      if (!Number.isNaN(parsed.getTime())) {
+        revokeAt = parsed.toISOString();
+      }
+    }
     const { error } = await supabase
       .from("thiet_bi_chung_thu_so")
-      .update({ thoi_diem_thu_hoi: now, ly_do_thu_hoi: reason, la_hien_hanh: false })
+      .update({ thoi_diem_thu_hoi: revokeAt, ly_do_thu_hoi: reason, la_hien_hanh: false })
       .eq("id", id);
     if (error) throw error;
 
@@ -642,6 +661,7 @@ export async function revokeCertificateAction(input: number | EntityInput): Prom
       thiet_bi_chung_thu_so_id: previous.id,
       thiet_bi_id: previous.thiet_bi_id,
       loai_su_kien: "thu_hoi",
+      thoi_diem_su_kien: revokeAt,
       nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
       so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
       email_truoc: previous.email,
@@ -687,7 +707,7 @@ export async function saveHandoverAction(input: EntityInput): Promise<ActionResu
       nguoi_nhan_id: nullableNumber(input, "nguoi_nhan_id"),
       phong_ban_nhan_id: nullableNumber(input, "phong_ban_nhan_id"),
       ngay_ban_giao: requiredText(input, "ngay_ban_giao", "ngày bàn giao"),
-      ngay_thu_hoi: nullableText(input, "ngay_thu_hoi"),
+      ngay_thu_hoi: null,
       hinh_thuc: nullableText(input, "hinh_thuc"),
       noi_dung: nullableText(input, "noi_dung"),
       ghi_chu: null,
@@ -767,6 +787,193 @@ export async function deleteMaintenanceAction(id: number): Promise<ActionResult>
   if (error) return failure(error);
   revalidatePath("/dashboard/bao-tri");
   return success("Đã xóa bản ghi bảo trì.");
+}
+
+export async function saveSystemConfigAction(input: EntityInput): Promise<ActionResult> {
+  const denied = await ensureActionAllowed();
+  if (denied) return denied;
+
+  try {
+    const supabase = await createClient();
+    const days = nullableNumber(input, "cts_canh_bao_so_ngay");
+    if (days == null || days < 1 || days > 365) {
+      throw new Error("Số ngày cảnh báo phải từ 1 đến 365.");
+    }
+    const { error } = await supabase
+      .from("he_thong_cau_hinh")
+      .upsert(
+        {
+          key: "cts_canh_bao_so_ngay",
+          value: days,
+          mo_ta: "So ngay truoc khi het hieu luc se danh dau CTS la sap_het_han.",
+        },
+        { onConflict: "key" }
+      );
+    if (error) throw error;
+    revalidatePath("/dashboard/cau-hinh");
+    revalidatePath("/dashboard/chung-thu-so");
+    revalidatePath("/dashboard/bao-cao");
+    revalidatePath("/dashboard");
+    return success("Đã cập nhật cấu hình hệ thống.");
+  } catch (error) {
+    return failure(error);
+  }
+}
+
+export async function importDevicesAction(rows: EntityInput[]): Promise<ActionResult> {
+  const denied = await ensureActionAllowed();
+  if (denied) return denied;
+
+  try {
+    if (!rows.length) throw new Error("Không có dòng thiết bị nào để import.");
+    const supabase = await createClient();
+    const [deviceTypes, models, departments, statuses, sources, staff] = await Promise.all([
+      supabase.from("loai_thiet_bi").select("id, ma_loai, ten_loai"),
+      supabase.from("hang_model").select("id, ten_hang, ten_model"),
+      supabase.from("phong_ban").select("id, ma_phong_ban, ten_phong_ban"),
+      supabase.from("tinh_trang_thiet_bi").select("id, ma_tinh_trang, ten_tinh_trang"),
+      supabase.from("nguon_goc_tai_san").select("id, ma_nguon_goc, ten_nguon_goc"),
+      supabase.from("nguoi_dung").select("id, ho_ten, email, ten_dang_nhap"),
+    ]);
+
+    const findDeviceType = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (deviceTypes.data ?? []).find(
+          (item) =>
+            normalizeText(item.ma_loai ?? "") === term ||
+            normalizeText(item.ten_loai) === term
+        ) ?? null
+      );
+    };
+    const findDepartment = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (departments.data ?? []).find(
+          (item) =>
+            normalizeText(item.ma_phong_ban ?? "") === term ||
+            normalizeText(item.ten_phong_ban) === term
+        ) ?? null
+      );
+    };
+    const findStatus = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (statuses.data ?? []).find(
+          (item) =>
+            normalizeText(item.ma_tinh_trang ?? "") === term ||
+            normalizeText(item.ten_tinh_trang) === term
+        ) ?? null
+      );
+    };
+    const findSource = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (sources.data ?? []).find(
+          (item) =>
+            normalizeText(item.ma_nguon_goc ?? "") === term ||
+            normalizeText(item.ten_nguon_goc) === term
+        ) ?? null
+      );
+    };
+    const findStaff = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (staff.data ?? []).find(
+          (item) =>
+            normalizeText(item.email ?? "") === term ||
+            normalizeText(item.ten_dang_nhap) === term ||
+            normalizeText(item.ho_ten) === term
+        ) ?? null
+      );
+    };
+    const findModel = (value: string | null) => {
+      const term = normalizeText(value ?? "");
+      if (!term) return null;
+      return (
+        (models.data ?? []).find((item) => {
+          const text = normalizeText(`${item.ten_hang ?? ""} ${item.ten_model ?? ""}`);
+          return text.includes(term);
+        }) ?? null
+      );
+    };
+
+    let imported = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors: string[] = [];
+
+    for (const [index, row] of rows.entries()) {
+      const ma = toOptionalString(String(row.ma_thiet_bi ?? ""));
+      const ten = toOptionalString(String(row.ten_thiet_bi ?? ""));
+      const loaiText = toOptionalString(String(row.loai_thiet_bi ?? ""));
+      if (!ma || !ten || !loaiText) {
+        skipped += 1;
+        errors.push(`Dòng ${index + 1}: thiếu mã/tên/loại thiết bị.`);
+        continue;
+      }
+      const loai = findDeviceType(loaiText);
+      if (!loai) {
+        skipped += 1;
+        errors.push(`Dòng ${index + 1}: không tìm thấy loại "${loaiText}".`);
+        continue;
+      }
+      const department = findDepartment(toOptionalString(String(row.phong_ban ?? "")));
+      const status = findStatus(toOptionalString(String(row.tinh_trang ?? "")));
+      const source = findSource(toOptionalString(String(row.nguon_goc ?? "")));
+      const user = findStaff(toOptionalString(String(row.nguoi_su_dung ?? "")));
+      const model = findModel(toOptionalString(String(row.hang_model ?? "")));
+      const payload = {
+        ma_thiet_bi: ma,
+        ten_thiet_bi: ten,
+        loai_thiet_bi_id: loai.id,
+        hang_model_id: model?.id ?? null,
+        serial: nullableText(row, "serial"),
+        nam_trang_bi: nullableNumber(row, "nam_trang_bi"),
+        ngay_tiep_nhan: nullableText(row, "ngay_tiep_nhan"),
+        nguon_goc_id: source?.id ?? null,
+        tinh_trang_id: status?.id ?? null,
+        phong_ban_id: department?.id ?? null,
+        nguoi_su_dung_id: user?.id ?? null,
+        thiet_bi_mat: boolValue(row, "thiet_bi_mat", false),
+        dap_ung_cds: boolValue(row, "dap_ung_cds", false),
+        nhom_cds: nullableText(row, "nhom_cds"),
+        ghi_chu: nullableText(row, "ghi_chu"),
+      };
+
+      const { data: existing } = await supabase
+        .from("thiet_bi")
+        .select("id")
+        .eq("ma_thiet_bi", ma)
+        .maybeSingle();
+
+      const result = existing
+        ? await supabase.from("thiet_bi").update(payload).eq("id", existing.id)
+        : await supabase.from("thiet_bi").insert(payload);
+      if (result.error) {
+        skipped += 1;
+        errors.push(`Dòng ${index + 1}: ${result.error.message}`);
+        continue;
+      }
+      if (existing) updated += 1;
+      else imported += 1;
+    }
+
+    revalidatePath("/dashboard/thiet-bi");
+    revalidatePath("/dashboard/bao-cao");
+    revalidatePath("/dashboard");
+    const detail = errors.length ? ` Lỗi: ${errors.slice(0, 5).join(" | ")}` : "";
+    return success(
+      `Đã thêm mới ${imported}, cập nhật ${updated}, bỏ qua ${skipped} dòng.${detail}`
+    );
+  } catch (error) {
+    return failure(error);
+  }
 }
 
 export async function saveCatalogAction(

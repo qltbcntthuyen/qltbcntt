@@ -2,12 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BadgeCheck, Building2, HardDrive, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
-
-import { deleteDeviceAction, saveDeviceAction, type EntityInput } from "@/app/actions/mutations";
 import {
-  CertificateStatusBadge,
+  BadgeCheck,
+  Building2,
+  Download,
+  FileText,
+  HardDrive,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
+
+import {
+  deleteDeviceAction,
+  importDevicesAction,
+  saveDeviceAction,
+  type EntityInput,
+} from "@/app/actions/mutations";
+import {
   DeviceConditionBadge,
   StatCard,
   TextLinkButton,
@@ -17,10 +32,11 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Pagination, paginate } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
-import { CERTIFICATE_STATUS_OPTIONS } from "@/lib/constants";
+import { NHOM_CDS_LABELS, NHOM_CDS_OPTIONS } from "@/lib/constants";
 import type { DeviceListItem, LookupData } from "@/lib/data";
-import { display, formatDate } from "@/lib/format";
+import { display } from "@/lib/format";
 
 type DeviceFilters = {
   q?: string;
@@ -28,7 +44,16 @@ type DeviceFilters = {
   phongBan?: string;
   tinhTrang?: string;
   nguoiDung?: string;
-  chungThu?: string;
+};
+
+type ImportPreviewRow = {
+  index: number;
+  payload: EntityInput;
+  ma: string;
+  ten: string;
+  loai: string;
+  status: "ready" | "review";
+  note: string;
 };
 
 const emptyDevice: EntityInput = {
@@ -45,6 +70,9 @@ const emptyDevice: EntityInput = {
   nguoi_su_dung_id: "",
   la_thiet_bi_dung_chung: false,
   thiet_bi_mat: false,
+  dap_ung_cds: false,
+  nhom_cds: "",
+  ghi_chu: "",
   mainboard: "",
   cpu: "",
   ram: "",
@@ -52,6 +80,7 @@ const emptyDevice: EntityInput = {
   man_hinh: "",
   he_dieu_hanh_id: "",
   phan_mem_diet_virus_id: "",
+  ghi_chu_ky_thuat: "",
 };
 
 function deviceToInput(row: DeviceListItem): EntityInput {
@@ -70,15 +99,63 @@ function deviceToInput(row: DeviceListItem): EntityInput {
     nguoi_su_dung_id: row.nguoi_su_dung_id ?? "",
     la_thiet_bi_dung_chung: Boolean(row.la_thiet_bi_dung_chung),
     thiet_bi_mat: Boolean(row.thiet_bi_mat),
-    mainboard: "",
-    cpu: "",
-    ram: "",
-    o_cung: "",
-    man_hinh: "",
-    he_dieu_hanh_id: "",
-    phan_mem_diet_virus_id: "",
+    dap_ung_cds: Boolean(row.dap_ung_cds),
+    nhom_cds: row.nhom_cds ?? "",
+    ghi_chu: row.ghi_chu ?? "",
+    mainboard: row.cau_hinh?.mainboard ?? "",
+    cpu: row.cau_hinh?.cpu ?? "",
+    ram: row.cau_hinh?.ram ?? "",
+    o_cung: row.cau_hinh?.o_cung ?? "",
+    man_hinh: row.cau_hinh?.man_hinh ?? "",
+    he_dieu_hanh_id: row.cau_hinh?.he_dieu_hanh_id ?? "",
+    phan_mem_diet_virus_id: row.cau_hinh?.phan_mem_diet_virus_id ?? "",
+    ghi_chu_ky_thuat: row.cau_hinh?.ghi_chu ?? "",
   };
 }
+
+function summarizeTech(row: DeviceListItem) {
+  const parts: string[] = [];
+  if (row.cau_hinh?.cpu) parts.push(`CPU: ${row.cau_hinh.cpu}`);
+  if (row.cau_hinh?.ram) parts.push(`RAM: ${row.cau_hinh.ram}`);
+  if (row.cau_hinh?.o_cung) parts.push(`Ổ: ${row.cau_hinh.o_cung}`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+const TEMPLATE_HEADERS = [
+  "ma_thiet_bi",
+  "ten_thiet_bi",
+  "loai_thiet_bi",
+  "hang_model",
+  "serial",
+  "nam_trang_bi",
+  "ngay_tiep_nhan",
+  "nguon_goc",
+  "tinh_trang",
+  "phong_ban",
+  "nguoi_su_dung",
+  "thiet_bi_mat",
+  "dap_ung_cds",
+  "nhom_cds",
+  "ghi_chu",
+];
+
+const TEMPLATE_HEADER_LABELS: Record<string, string> = {
+  ma_thiet_bi: "Mã thiết bị (bắt buộc)",
+  ten_thiet_bi: "Tên thiết bị (bắt buộc)",
+  loai_thiet_bi: "Loại thiết bị (bắt buộc - khớp danh mục)",
+  hang_model: "Hãng/Model",
+  serial: "Serial",
+  nam_trang_bi: "Năm trang bị",
+  ngay_tiep_nhan: "Ngày tiếp nhận (YYYY-MM-DD)",
+  nguon_goc: "Nguồn gốc",
+  tinh_trang: "Tình trạng",
+  phong_ban: "Phòng ban",
+  nguoi_su_dung: "Người sử dụng (email/họ tên)",
+  thiet_bi_mat: "Thiết bị mật (true/false)",
+  dap_ung_cds: "Đáp ứng CĐS (true/false)",
+  nhom_cds: "Nhóm CĐS (may_tinh_de_ban, laptop, may_in...)",
+  ghi_chu: "Ghi chú",
+};
 
 export function DeviceListClient({
   rows,
@@ -96,22 +173,34 @@ export function DeviceListClient({
     phongBan: filters.phongBan ?? "",
     tinhTrang: filters.tinhTrang ?? "",
     nguoiDung: filters.nguoiDung ?? "",
-    chungThu: filters.chungThu ?? "all",
   });
   const [form, setForm] = useState<EntityInput>(emptyDevice);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeviceListItem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importRows, setImportRows] = useState<ImportPreviewRow[]>([]);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const assignedCount = rows.filter((row) => row.nguoi_su_dung_id != null).length;
   const unassignedCount = rows.filter((row) => row.nguoi_su_dung_id == null).length;
-  const certificateCount = rows.filter((row) => row.chung_thu).length;
+  const cdsCount = rows.filter((row) => row.dap_ung_cds).length;
+
+  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+  const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function applyFilters(next: DeviceFilters) {
     const params = new URLSearchParams();
     Object.entries(next).forEach(([key, value]) => {
       if (value && value !== "all") params.set(key, value);
     });
+    setPage(1);
     router.push(`/dashboard/thiet-bi${params.size ? `?${params}` : ""}`);
   }
 
@@ -152,17 +241,130 @@ export function DeviceListClient({
     });
   }
 
+  async function downloadTemplate() {
+    const XLSX = await import("xlsx");
+    const data = [TEMPLATE_HEADERS.map((key) => TEMPLATE_HEADER_LABELS[key] ?? key)];
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet["!cols"] = TEMPLATE_HEADERS.map((key) => ({
+      wch: Math.max((TEMPLATE_HEADER_LABELS[key] ?? key).length + 4, 20),
+    }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Mau import thiet bi");
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mau-import-thiet-bi.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportFile(file: File | null) {
+    if (!file) return;
+    const XLSX = await import("xlsx");
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+      defval: "",
+      raw: false,
+    });
+
+    const mapped: ImportPreviewRow[] = data.map((raw, index) => {
+      const get = (...keys: string[]) => {
+        for (const key of keys) {
+          const value = raw[key];
+          if (value !== null && value !== undefined && String(value).trim()) {
+            return String(value).trim();
+          }
+        }
+        return "";
+      };
+      const ma = get(
+        "ma_thiet_bi",
+        "Mã thiết bị (bắt buộc)",
+        "Mã thiết bị",
+        "Ma thiet bi"
+      );
+      const ten = get(
+        "ten_thiet_bi",
+        "Tên thiết bị (bắt buộc)",
+        "Tên thiết bị",
+        "Ten thiet bi"
+      );
+      const loai = get(
+        "loai_thiet_bi",
+        "Loại thiết bị (bắt buộc - khớp danh mục)",
+        "Loại thiết bị",
+        "Loai thiet bi"
+      );
+      const truthy = (value: string) =>
+        ["true", "1", "x", "yes", "co", "có"].includes(value.toLowerCase());
+      const payload: EntityInput = {
+        ma_thiet_bi: ma,
+        ten_thiet_bi: ten,
+        loai_thiet_bi: loai,
+        hang_model: get("hang_model", "Hãng/Model"),
+        serial: get("serial", "Serial"),
+        nam_trang_bi: get("nam_trang_bi", "Năm trang bị"),
+        ngay_tiep_nhan: get("ngay_tiep_nhan", "Ngày tiếp nhận", "Ngày tiếp nhận (YYYY-MM-DD)"),
+        nguon_goc: get("nguon_goc", "Nguồn gốc"),
+        tinh_trang: get("tinh_trang", "Tình trạng"),
+        phong_ban: get("phong_ban", "Phòng ban"),
+        nguoi_su_dung: get("nguoi_su_dung", "Người sử dụng (email/họ tên)", "Người sử dụng"),
+        thiet_bi_mat: truthy(get("thiet_bi_mat", "Thiết bị mật", "Thiết bị mật (true/false)")),
+        dap_ung_cds: truthy(get("dap_ung_cds", "Đáp ứng CĐS", "Đáp ứng CĐS (true/false)")),
+        nhom_cds: get("nhom_cds", "Nhóm CĐS", "Nhóm CĐS (may_tinh_de_ban, laptop, may_in...)"),
+        ghi_chu: get("ghi_chu", "Ghi chú"),
+      };
+      const ready = Boolean(ma && ten && loai);
+      return {
+        index: index + 1,
+        payload,
+        ma,
+        ten,
+        loai,
+        status: ready ? "ready" : "review",
+        note: ready ? "Sẵn sàng" : "Thiếu mã/tên/loại thiết bị",
+      };
+    });
+
+    setImportRows(mapped);
+    setImportOpen(true);
+    setImportMessage(`Đã đọc ${mapped.length} dòng từ file ${file.name}.`);
+  }
+
+  function commitImport() {
+    const ready = importRows.filter((row) => row.status === "ready").map((row) => row.payload);
+    if (!ready.length) {
+      setImportMessage("Không có dòng nào sẵn sàng để import.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await importDevicesAction(ready);
+      setImportMessage(result.message);
+      if (result.ok) {
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Thiết bị đang hiển thị" value={rows.length} icon={HardDrive} tone="blue" />
         <StatCard label="Đã phân công" value={assignedCount} icon={Building2} tone="green" />
         <StatCard label="Chưa phân công" value={unassignedCount} icon={RotateCcw} tone="amber" />
-        <StatCard label="Có chứng thư số" value={certificateCount} icon={BadgeCheck} tone="slate" />
+        <StatCard label="Đáp ứng CĐS" value={cdsCount} icon={BadgeCheck} tone="slate" />
       </section>
 
       <section className="admin-panel p-4">
-        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(5,minmax(140px,180px))_auto]">
+        <div className="grid gap-3 lg:grid-cols-[minmax(220px,1fr)_repeat(4,minmax(140px,180px))_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -227,18 +429,6 @@ export function DeviceListClient({
               </option>
             ))}
           </Select>
-          <Select
-            value={filterState.chungThu ?? "all"}
-            onChange={(event) =>
-              setFilterState((current) => ({ ...current, chungThu: event.target.value }))
-            }
-          >
-            {CERTIFICATE_STATUS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
           <div className="flex gap-2">
             <Button type="button" onClick={() => applyFilters(filterState)}>
               Áp dụng
@@ -249,6 +439,7 @@ export function DeviceListClient({
               size="icon"
               onClick={() => {
                 setFilterState({});
+                setPage(1);
                 router.push("/dashboard/thiet-bi");
               }}
             >
@@ -259,12 +450,30 @@ export function DeviceListClient({
         </div>
       </section>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-slate-600">Hiển thị {rows.length} thiết bị</p>
-        <Button type="button" onClick={openCreate}>
-          <Plus className="size-4" />
-          Thêm thiết bị
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={downloadTemplate}>
+            <FileText className="size-4" />
+            File mẫu Excel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setImportRows([]);
+              setImportMessage(null);
+              setImportOpen(true);
+            }}
+          >
+            <Upload className="size-4" />
+            Import Excel
+          </Button>
+          <Button type="button" onClick={openCreate}>
+            <Plus className="size-4" />
+            Thêm thiết bị
+          </Button>
+        </div>
       </div>
 
       {message ? (
@@ -274,11 +483,12 @@ export function DeviceListClient({
       ) : null}
 
       <section className="admin-panel overflow-hidden">
-        {rows.length ? (
+        {pageRows.length ? (
           <div className="overflow-x-auto">
-            <table className="admin-table min-w-[1180px]">
+            <table className="admin-table min-w-[1280px]">
               <thead>
                 <tr>
+                  <th className="w-12">STT</th>
                   <th>Mã thiết bị</th>
                   <th>Tên thiết bị</th>
                   <th>Loại</th>
@@ -286,13 +496,15 @@ export function DeviceListClient({
                   <th>Phòng ban</th>
                   <th>Người sử dụng</th>
                   <th>Tình trạng</th>
-                  <th>Chứng thư số</th>
+                  <th>Thông tin kỹ thuật</th>
+                  <th>Đáp ứng CĐS</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {pageRows.map((row, index) => (
                   <tr key={row.id}>
+                    <td className="text-slate-500">{baseIndex + index + 1}</td>
                     <td className="font-medium text-slate-950">
                       <Link href={`/dashboard/thiet-bi/${row.id}`} className="hover:underline">
                         {row.ma_thiet_bi}
@@ -312,15 +524,25 @@ export function DeviceListClient({
                     <td>
                       <DeviceConditionBadge label={row.tinh_trang?.ten_tinh_trang} />
                     </td>
+                    <td className="max-w-[260px] text-xs text-slate-600">
+                      {summarizeTech(row)}
+                      {row.cau_hinh?.ghi_chu ? (
+                        <p className="mt-1 italic text-slate-500">{row.cau_hinh.ghi_chu}</p>
+                      ) : null}
+                    </td>
                     <td>
-                      <div className="space-y-1">
-                        <CertificateStatusBadge status={row.chung_thu?.trang_thai} />
-                        {row.chung_thu?.ngay_het_hieu_luc ? (
-                          <p className="text-xs text-slate-500">
-                            Hết hạn {formatDate(row.chung_thu.ngay_het_hieu_luc)}
-                          </p>
-                        ) : null}
-                      </div>
+                      {row.dap_ung_cds ? (
+                        <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                          Có
+                        </span>
+                      ) : (
+                        <span className="text-xs text-slate-500">—</span>
+                      )}
+                      {row.nhom_cds ? (
+                        <p className="mt-1 text-[11px] text-slate-500">
+                          {NHOM_CDS_LABELS[row.nhom_cds] ?? row.nhom_cds}
+                        </p>
+                      ) : null}
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
@@ -352,6 +574,17 @@ export function DeviceListClient({
           </div>
         )}
       </section>
+
+      <Pagination
+        total={rows.length}
+        page={safePage}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
 
       <Modal
         open={dialogOpen}
@@ -397,6 +630,9 @@ export function DeviceListClient({
             <Field label="Năm trang bị">
               <Input type="number" value={String(form.nam_trang_bi ?? "")} onChange={(e) => setField("nam_trang_bi", e.target.value)} />
             </Field>
+            <Field label="Ghi chú thiết bị" className="md:col-span-2">
+              <Input value={String(form.ghi_chu ?? "")} onChange={(e) => setField("ghi_chu", e.target.value)} />
+            </Field>
           </FormSection>
 
           <FormSection title="Phân công sử dụng">
@@ -438,7 +674,7 @@ export function DeviceListClient({
                 ))}
               </Select>
             </Field>
-            <div className="flex items-center gap-5 pt-6">
+            <div className="flex flex-wrap items-center gap-5 pt-6">
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={Boolean(form.la_thiet_bi_dung_chung)} onChange={(e) => setField("la_thiet_bi_dung_chung", e.target.checked)} />
                 Thiết bị dùng chung
@@ -447,7 +683,21 @@ export function DeviceListClient({
                 <input type="checkbox" checked={Boolean(form.thiet_bi_mat)} onChange={(e) => setField("thiet_bi_mat", e.target.checked)} />
                 Thiết bị mật
               </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={Boolean(form.dap_ung_cds)} onChange={(e) => setField("dap_ung_cds", e.target.checked)} />
+                Đáp ứng yêu cầu chuyển đổi số
+              </label>
             </div>
+            <Field label="Nhóm CĐS" className="md:col-span-2">
+              <Select value={String(form.nhom_cds ?? "")} onChange={(e) => setField("nhom_cds", e.target.value)}>
+                <option value="">Chưa phân nhóm</option>
+                {NHOM_CDS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           </FormSection>
 
           <FormSection title="Thông tin kỹ thuật">
@@ -486,6 +736,13 @@ export function DeviceListClient({
                 ))}
               </Select>
             </Field>
+            <Field label="Ghi chú kỹ thuật" className="md:col-span-2">
+              <Input
+                value={String(form.ghi_chu_ky_thuat ?? "")}
+                onChange={(e) => setField("ghi_chu_ky_thuat", e.target.value)}
+                placeholder="Cấu hình bổ sung, lưu ý cài đặt..."
+              />
+            </Field>
           </FormSection>
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -495,6 +752,90 @@ export function DeviceListClient({
           <Button type="button" onClick={submitForm} disabled={isPending}>
             {isPending ? "Đang lưu..." : "Lưu thiết bị"}
           </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={importOpen}
+        title="Import Excel thiết bị"
+        description="Tải lên file Excel theo mẫu. Các dòng thiếu mã/tên/loại sẽ bị bỏ qua."
+        onClose={() => setImportOpen(false)}
+        className="max-w-4xl"
+      >
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={downloadTemplate}>
+              <Download className="size-4" />
+              Tải file mẫu
+            </Button>
+            <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <Upload className="size-4" />
+              Chọn file Excel
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="sr-only"
+                onChange={(event) => handleImportFile(event.target.files?.[0] ?? null)}
+              />
+            </Label>
+          </div>
+          {importMessage ? <p className="text-sm text-slate-600">{importMessage}</p> : null}
+          {importRows.length ? (
+            <div className="overflow-x-auto">
+              <table className="admin-table min-w-[860px]">
+                <thead>
+                  <tr>
+                    <th>Dòng</th>
+                    <th>Mã thiết bị</th>
+                    <th>Tên thiết bị</th>
+                    <th>Loại</th>
+                    <th>Trạng thái</th>
+                    <th>Ghi chú</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importRows.map((row) => (
+                    <tr key={row.index}>
+                      <td>{row.index}</td>
+                      <td>{display(row.ma)}</td>
+                      <td>{display(row.ten)}</td>
+                      <td>{display(row.loai)}</td>
+                      <td>
+                        {row.status === "ready" ? (
+                          <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                            Sẵn sàng
+                          </span>
+                        ) : (
+                          <span className="rounded-sm bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                            Cần rà soát
+                          </span>
+                        )}
+                      </td>
+                      <td>{row.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              title="Chưa có dữ liệu preview"
+              description="Tải file Excel theo đúng mẫu để xem dữ liệu trước khi import."
+            />
+          )}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setImportOpen(false)}>
+              Đóng
+            </Button>
+            <Button
+              type="button"
+              onClick={commitImport}
+              disabled={isPending || !importRows.some((row) => row.status === "ready")}
+            >
+              Ghi dữ liệu
+            </Button>
+          </div>
         </div>
       </Modal>
 

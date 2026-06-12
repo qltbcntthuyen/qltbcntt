@@ -13,6 +13,8 @@ export default async function CertificatePage({
       q: params.q,
       trangThai: params.trangThai,
       phongBan: params.phongBan,
+      hieuLucFrom: params.hieuLucFrom,
+      hieuLucTo: params.hieuLucTo,
     }),
     getCertificateRecords(),
     getCertificateHistoryRecords(),
@@ -30,6 +32,8 @@ export default async function CertificatePage({
           q: params.q,
           trangThai: params.trangThai,
           phongBan: params.phongBan,
+          hieuLucFrom: params.hieuLucFrom,
+          hieuLucTo: params.hieuLucTo,
         }}
       />
     </>

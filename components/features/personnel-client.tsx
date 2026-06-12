@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import { deletePersonAction, savePersonAction, type EntityInput } from "@/app/actions/mutations";
 import {
@@ -17,6 +17,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Pagination, paginate } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { LookupData, StaffItem } from "@/lib/data";
@@ -77,7 +78,14 @@ export function PersonnelClient({
   const [deleteTarget, setDeleteTarget] = useState<StaffItem | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<StaffItem | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
+
+  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+  const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function applyFilters(next: PersonnelFilters) {
     const params = new URLSearchParams();
@@ -206,11 +214,12 @@ export function PersonnelClient({
       ) : null}
 
       <section className="admin-panel overflow-hidden">
-        {rows.length ? (
+        {pageRows.length ? (
           <div className="overflow-x-auto">
             <table className="admin-table min-w-[1080px]">
               <thead>
                 <tr>
+                  <th className="w-12">STT</th>
                   <th>Họ tên</th>
                   <th>Mã hồ sơ</th>
                   <th>Phòng ban</th>
@@ -224,8 +233,9 @@ export function PersonnelClient({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {pageRows.map((row, index) => (
                   <tr key={row.id} className="cursor-pointer" onClick={() => setSelectedPerson(row)}>
+                    <td className="text-slate-500">{baseIndex + index + 1}</td>
                     <td className="font-medium text-slate-950">
                       <button
                         type="button"
@@ -235,7 +245,7 @@ export function PersonnelClient({
                         {row.ho_ten}
                       </button>
                     </td>
-                    <td>{row.ten_dang_nhap}</td>
+                    <td className="font-mono text-slate-700">{row.ten_dang_nhap}</td>
                     <td>{display(row.phong_ban?.ten_phong_ban)}</td>
                     <td>
                       <div className="space-y-1">
@@ -292,6 +302,17 @@ export function PersonnelClient({
         )}
       </section>
 
+      <Pagination
+        total={rows.length}
+        page={safePage}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+
       <Modal
         open={dialogOpen}
         title={form.id ? "Chỉnh sửa nhân sự" : "Thêm nhân sự"}
@@ -308,8 +329,19 @@ export function PersonnelClient({
           <Field label="Họ tên" required>
             <Input value={String(form.ho_ten ?? "")} onChange={(e) => setField("ho_ten", e.target.value)} />
           </Field>
-          <Field label="Mã hồ sơ" required>
-            <Input value={String(form.ten_dang_nhap ?? "")} onChange={(e) => setField("ten_dang_nhap", e.target.value)} />
+          <Field label="Mã hồ sơ">
+            <Input
+              value={String(form.ten_dang_nhap ?? "")}
+              readOnly
+              disabled
+              placeholder={form.id ? "" : "Tự sinh dạng NS001 khi lưu"}
+              className="font-mono"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {form.id
+                ? "Mã hồ sơ là duy nhất và không sửa được sau khi tạo."
+                : "Hệ thống tự sinh mã hồ sơ tăng dần (NS001, NS002...) khi lưu."}
+            </p>
           </Field>
           <Field label="Email">
             <Input type="email" value={String(form.email ?? "")} onChange={(e) => setField("email", e.target.value)} />

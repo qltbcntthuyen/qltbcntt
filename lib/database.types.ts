@@ -153,6 +153,8 @@ export type Database = {
           nguoi_su_dung_id: number | null;
           la_thiet_bi_dung_chung: boolean | null;
           thiet_bi_mat: boolean | null;
+          dap_ung_cds: boolean;
+          nhom_cds: string | null;
           ghi_chu: string | null;
         },
         {
@@ -170,7 +172,23 @@ export type Database = {
           nguoi_su_dung_id?: number | null;
           la_thiet_bi_dung_chung?: boolean | null;
           thiet_bi_mat?: boolean | null;
+          dap_ung_cds?: boolean;
+          nhom_cds?: string | null;
           ghi_chu?: string | null;
+        }
+      >;
+      he_thong_cau_hinh: TableDefinition<
+        {
+          key: string;
+          value: Json;
+          mo_ta: string | null;
+          updated_at: string;
+        },
+        {
+          key: string;
+          value: Json;
+          mo_ta?: string | null;
+          updated_at?: string;
         }
       >;
       cau_hinh_may_tinh: TableDefinition<
@@ -445,7 +463,12 @@ export type Database = {
         Relationships: [];
       };
     };
-    Functions: Record<string, never>;
+    Functions: {
+      gen_ma_nhan_su: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

@@ -4,14 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
-  BadgePlus,
   CalendarClock,
+  Download,
   FilePenLine,
+  FileText,
   FileUp,
   RefreshCcw,
   Search,
   ShieldAlert,
-  SquareCheckBig,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -30,6 +30,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
+import { Pagination, paginate } from "@/components/ui/pagination";
 import { Select } from "@/components/ui/select";
 import { CERTIFICATE_STATUS_OPTIONS } from "@/lib/constants";
 import type {
@@ -44,6 +45,8 @@ type CertificateFilters = {
   q?: string;
   trangThai?: string;
   phongBan?: string;
+  hieuLucFrom?: string;
+  hieuLucTo?: string;
 };
 
 type ImportPreviewRow = {
@@ -125,6 +128,19 @@ function pickText(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+const TEMPLATE_HEADERS = [
+  "Mã thiết bị",
+  "Serial CTS",
+  "Tên CTS",
+  "Email",
+  "Loại CTS",
+  "Tổ chức",
+  "Thông tin chung",
+  "ID chứng thư số",
+  "Hiệu lực",
+  "Hết hạn",
+];
+
 export function CertificateListClient({
   rows,
   records,
@@ -144,7 +160,6 @@ export function CertificateListClient({
     () => new Map(lookups.deviceTypes.map((item) => [item.id, item])),
     [lookups.deviceTypes]
   );
-  const deviceMap = useMemo(() => new Map(lookups.devices.map((item) => [item.id, item])), [lookups.devices]);
   const staffMap = useMemo(() => new Map(lookups.staff.map((item) => [item.id, item])), [lookups.staff]);
   const currentRecordsByDevice = useMemo(() => {
     const map = new Map<number, Certificate[]>();
@@ -170,7 +185,13 @@ export function CertificateListClient({
       lookups.devices.filter((device) => {
         const type = typeMap.get(device.loai_thiet_bi_id);
         const haystack = `${type?.ma_loai ?? ""} ${type?.ten_loai ?? ""}`.toLowerCase();
-        return haystack.includes("token") || haystack.includes("sim pki") || haystack.includes("sim_pki");
+        return (
+          haystack.includes("token") ||
+          haystack.includes("sim pki") ||
+          haystack.includes("sim_pki") ||
+          haystack.includes("ký số") ||
+          haystack.includes("ky so")
+        );
       }),
     [lookups.devices, typeMap]
   );
@@ -178,7 +199,6 @@ export function CertificateListClient({
     active: rows.filter((row) => row.trang_thai === "dang_hieu_luc").length,
     expiring: rows.filter((row) => row.trang_thai === "sap_het_han").length,
     renewed: rows.filter((row) => row.trang_thai === "da_gia_han").length,
-    needNew: rows.filter((row) => row.trang_thai === "can_cap_moi").length,
     revoke: rows.filter((row) => row.trang_thai === "can_thu_hoi").length,
   };
 
@@ -186,6 +206,8 @@ export function CertificateListClient({
     q: filters.q ?? "",
     trangThai: filters.trangThai ?? "all",
     phongBan: filters.phongBan ?? "",
+    hieuLucFrom: filters.hieuLucFrom ?? "",
+    hieuLucTo: filters.hieuLucTo ?? "",
   });
   const [form, setForm] = useState<EntityInput>(emptyCertificate);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -194,54 +216,31 @@ export function CertificateListClient({
   const [deleteTarget, setDeleteTarget] = useState<CertificateReportRow | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<CertificateReportRow | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
+  const [revokeAt, setRevokeAt] = useState("");
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportPreviewRow[]>([]);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
+
+  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
+  const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages);
+  const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function applyFilters(next: CertificateFilters) {
     const params = new URLSearchParams();
     Object.entries(next).forEach(([key, value]) => {
       if (value && value !== "all") params.set(key, value);
     });
+    setPage(1);
     router.push(`/dashboard/chung-thu-so${params.size ? `?${params}` : ""}`);
   }
 
   function setField(key: string, value: string | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
-  }
-
-  function openCreate() {
-    setMessage(null);
-    setDialogMode("cap_moi");
-    setForm(emptyCertificate);
-    setDialogOpen(true);
-  }
-
-  function openNewFromDevice(row?: CertificateReportRow | null) {
-    setMessage(null);
-    setDialogMode("cap_moi");
-    if (row?.thiet_bi_id) {
-      const device = deviceMap.get(row.thiet_bi_id);
-      const staff = row.nguoi_su_dung_id ? staffMap.get(row.nguoi_su_dung_id) : null;
-      setForm({
-        ...emptyCertificate,
-        thiet_bi_id: row.thiet_bi_id,
-        nguoi_su_dung_id: row.nguoi_su_dung_id ?? device?.nguoi_su_dung_id ?? "",
-        so_hieu_chung_thu_so: "",
-        email: row.email ?? staff?.email ?? "",
-        ten_chung_thu_so: row.ten_chung_thu_so ?? staff?.ho_ten ?? "",
-        loai_chung_thu_so: row.loai_chung_thu_so ?? "",
-        to_chuc: row.to_chuc ?? "",
-        thong_tin_chung: row.thong_tin_chung ?? "",
-        id_chung_thu_so_nguon: row.id_chung_thu_so_nguon ?? "",
-      });
-    } else {
-      setForm(emptyCertificate);
-    }
-    setDialogOpen(true);
   }
 
   function openRenew(row: CertificateReportRow) {
@@ -252,7 +251,7 @@ export function CertificateListClient({
       return;
     }
     if (record.da_gia_han || record.chung_thu_goc_id) {
-      setMessage("CTS này đã được gia hạn một lần. Hãy dùng Cấp mới để tạo serial mới.");
+      setMessage("CTS này đã được gia hạn một lần. Hãy thu hồi để cấp serial mới.");
       return;
     }
     setMessage(null);
@@ -278,7 +277,6 @@ export function CertificateListClient({
     setForm({
       ...recordToInput(record, "thay_doi_thong_tin"),
       noi_dung_thay_doi: "",
-      thong_tin_moi: "",
     });
     setDialogOpen(true);
   }
@@ -293,7 +291,7 @@ export function CertificateListClient({
       nguoi_su_dung_id: device?.nguoi_su_dung_id ?? current.nguoi_su_dung_id ?? "",
       loai_chung_thu_so:
         current.loai_chung_thu_so ||
-        (deviceType?.ten_loai && /sim/i.test(deviceType.ten_loai) ? "Sim PKI" : deviceType?.ten_loai ?? ""),
+        (deviceType?.ten_loai && /sim/i.test(deviceType.ten_loai) ? "SIM ký số" : deviceType?.ten_loai ?? ""),
       email: current.email || staff?.email || "",
       ten_chung_thu_so: current.ten_chung_thu_so || staff?.ho_ten || "",
     }));
@@ -327,10 +325,12 @@ export function CertificateListClient({
       const result = await revokeCertificateAction({
         id,
         ly_do_thu_hoi: revokeReason,
+        thoi_diem_thu_hoi: revokeAt,
       });
       setMessage(result.message);
       setRevokeTarget(null);
       setRevokeReason("");
+      setRevokeAt("");
       if (result.ok) router.refresh();
     });
   }
@@ -346,24 +346,40 @@ export function CertificateListClient({
     });
   }
 
-  function toggleSelect(id: number) {
-    setSelectedIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    );
-  }
-
-  function selectAll(checked: boolean) {
-    setSelectedIds(checked ? rows.map((row) => row.thiet_bi_chung_thu_so_id ?? 0).filter(Boolean) : []);
-  }
-
-  function exportSelected(mode: "04" | "05") {
-    const ids = selectedIds.length ? selectedIds : rows.map((row) => row.thiet_bi_chung_thu_so_id ?? 0).filter(Boolean);
+  function exportActiveDocx() {
+    const ids = rows
+      .filter(
+        (row) => row.trang_thai === "dang_hieu_luc" || row.trang_thai === "sap_het_han"
+      )
+      .map((row) => row.thiet_bi_chung_thu_so_id ?? 0)
+      .filter(Boolean);
     if (!ids.length) {
-      setMessage("Chưa có CTS nào được chọn để xuất mẫu.");
+      setMessage("Chưa có CTS đang sử dụng để xuất.");
       return;
     }
-    const url = `/api/chung-thu-so/export?mau=${mode}&ids=${ids.join(",")}`;
+    const url = `/api/chung-thu-so/export?mau=dang_su_dung&ids=${ids.join(",")}`;
     window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  async function downloadTemplate() {
+    const XLSX = await import("xlsx");
+    const data = [TEMPLATE_HEADERS];
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet["!cols"] = TEMPLATE_HEADERS.map((header) => ({ wch: Math.max(header.length + 4, 18) }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Mau import CTS");
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "mau-import-chung-thu-so.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function handleImportFile(file: File | null) {
@@ -392,7 +408,7 @@ export function CertificateListClient({
         so_hieu_chung_thu_so: serial,
         email: pickText(row, ["Email"]),
         ten_chung_thu_so: pickText(row, ["Tên CTS", "Ten CTS"]),
-        loai_chung_thu_so: pickText(row, ["Loại chứng thư số", "Loai chung thu so"]),
+        loai_chung_thu_so: pickText(row, ["Loại CTS", "Loại chứng thư số", "Loai chung thu so"]),
         to_chuc: pickText(row, ["Tổ chức", "To chuc"]),
         thong_tin_chung: pickText(row, ["Thông tin chung", "Thong tin chung"]),
         id_chung_thu_so_nguon: pickText(row, ["ID chứng thư số", "Id chứng thư số"]),
@@ -457,22 +473,21 @@ export function CertificateListClient({
 
   return (
     <div className="space-y-4">
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Đang hiệu lực" value={stats.active} icon={BadgeCheck} tone="green" />
         <StatCard label="Sắp hết hạn" value={stats.expiring} icon={CalendarClock} tone="amber" />
         <StatCard label="Đã gia hạn" value={stats.renewed} icon={RefreshCcw} tone="slate" />
-        <StatCard label="Cần cấp mới" value={stats.needNew} icon={BadgePlus} tone="red" />
         <StatCard label="Cần thu hồi" value={stats.revoke} icon={ShieldAlert} tone="red" />
       </section>
 
       <section className="admin-panel p-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(260px,1fr)_180px_180px_auto]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(220px,1fr)_180px_180px_160px_160px_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={filterState.q ?? ""}
               onChange={(event) => setFilterState((current) => ({ ...current, q: event.target.value }))}
-              placeholder="Tìm kiếm"
+              placeholder="Tìm Serial CTS, email, thiết bị..."
               className="pl-9"
             />
           </div>
@@ -501,6 +516,22 @@ export function CertificateListClient({
               </option>
             ))}
           </Select>
+          <Input
+            type="date"
+            value={filterState.hieuLucFrom ?? ""}
+            onChange={(event) =>
+              setFilterState((current) => ({ ...current, hieuLucFrom: event.target.value }))
+            }
+            aria-label="Hết hạn từ ngày"
+          />
+          <Input
+            type="date"
+            value={filterState.hieuLucTo ?? ""}
+            onChange={(event) =>
+              setFilterState((current) => ({ ...current, hieuLucTo: event.target.value }))
+            }
+            aria-label="Hết hạn đến ngày"
+          />
           <div className="flex flex-wrap gap-2">
             <Button type="button" onClick={() => applyFilters(filterState)}>
               Áp dụng
@@ -511,34 +542,34 @@ export function CertificateListClient({
               size="icon"
               onClick={() => {
                 setFilterState({ trangThai: "all" });
+                setPage(1);
                 router.push("/dashboard/chung-thu-so");
               }}
+              aria-label="Đặt lại"
             >
               <RefreshCcw className="size-4" />
-              <span className="sr-only">Đặt lại</span>
             </Button>
           </div>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Bộ lọc thời hạn áp dụng theo “Ngày hết hiệu lực”.
+        </p>
       </section>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <p className="text-sm text-slate-600">Hiển thị {rows.length} serial CTS</p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" onClick={openCreate}>
-            <BadgePlus className="size-4" />
-            Cấp mới
+          <Button type="button" variant="outline" onClick={downloadTemplate}>
+            <FileText className="size-4" />
+            File mẫu Excel
           </Button>
           <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
             <Upload className="size-4" />
             Import Excel
           </Button>
-          <Button type="button" variant="outline" onClick={() => exportSelected("04")}>
+          <Button type="button" variant="outline" onClick={exportActiveDocx}>
             <FileUp className="size-4" />
-            Xuất Mẫu 04
-          </Button>
-          <Button type="button" variant="outline" onClick={() => exportSelected("05")}>
-            <FileUp className="size-4" />
-            Xuất Mẫu 05
+            Xuất danh sách CTS đang sử dụng
           </Button>
         </div>
       </div>
@@ -550,19 +581,12 @@ export function CertificateListClient({
       ) : null}
 
       <section className="admin-panel overflow-hidden">
-        {rows.length ? (
+        {pageRows.length ? (
           <div className="overflow-x-auto">
-            <table className="admin-table min-w-[1800px]">
+            <table className="admin-table min-w-[1500px]">
               <thead>
                 <tr>
-                  <th>
-                    <input
-                      type="checkbox"
-                      aria-label="Chọn tất cả"
-                      checked={selectedIds.length > 0 && selectedIds.length === rows.length}
-                      onChange={(e) => selectAll(e.target.checked)}
-                    />
-                  </th>
+                  <th className="w-12">STT</th>
                   <th>Serial CTS</th>
                   <th>Mã thiết bị</th>
                   <th>Tên CTS</th>
@@ -571,22 +595,14 @@ export function CertificateListClient({
                   <th>Tổ chức</th>
                   <th>Người sử dụng</th>
                   <th>Hiệu lực</th>
-                  <th>Đã gia hạn</th>
-                  <th>Hiện hành</th>
                   <th>Trạng thái</th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {pageRows.map((row, index) => (
                   <tr key={`${row.thiet_bi_chung_thu_so_id}-${row.thiet_bi_id}`}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(row.thiet_bi_chung_thu_so_id ?? 0)}
-                        onChange={() => toggleSelect(row.thiet_bi_chung_thu_so_id ?? 0)}
-                      />
-                    </td>
+                    <td className="text-slate-500">{baseIndex + index + 1}</td>
                     <td className="font-medium text-slate-950">
                       <button
                         type="button"
@@ -598,7 +614,10 @@ export function CertificateListClient({
                     </td>
                     <td>
                       {row.thiet_bi_id ? (
-                        <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                        <Link
+                          href={`/dashboard/thiet-bi/${row.thiet_bi_id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
                           {display(row.so_hieu_thiet_bi)}
                         </Link>
                       ) : (
@@ -616,22 +635,33 @@ export function CertificateListClient({
                         <p className="text-xs text-slate-500">đến {formatDate(row.ngay_het_hieu_luc)}</p>
                       </div>
                     </td>
-                    <td>{row.da_gia_han ? "Có" : "Không"}</td>
-                    <td>{row.la_hien_hanh ? "Có" : "Không"}</td>
                     <td>
                       <CertificateStatusBadge status={row.trang_thai} />
                     </td>
                     <td>
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" onClick={() => openNewFromDevice(row)}>
-                          <BadgePlus className="size-4" />
-                          Cấp mới
-                        </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => openRenew(row)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openRenew(row)}
+                          disabled={
+                            row.trang_thai === "da_thu_hoi" ||
+                            row.trang_thai === "da_gia_han"
+                          }
+                        >
                           <RefreshCcw className="size-4" />
                           Gia hạn
                         </Button>
-                        <Button type="button" variant="outline" size="sm" onClick={() => openChangeInfo(row)}>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openChangeInfo(row)}
+                          disabled={
+                            row.trang_thai === "da_thu_hoi"
+                          }
+                        >
                           <FilePenLine className="size-4" />
                           Đổi thông tin
                         </Button>
@@ -639,7 +669,10 @@ export function CertificateListClient({
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => setRevokeTarget(row)}
+                          onClick={() => {
+                            setRevokeTarget(row);
+                            setRevokeAt(new Date().toISOString().slice(0, 16));
+                          }}
                           disabled={row.trang_thai === "da_thu_hoi"}
                         >
                           <ShieldAlert className="size-4" />
@@ -665,22 +698,31 @@ export function CertificateListClient({
           <div className="p-5">
             <EmptyState
               title="Chưa có serial CTS phù hợp"
-              description="Thử đặt lại bộ lọc hoặc cấp mới CTS cho thiết bị."
+              description="Thử đặt lại bộ lọc hoặc thêm CTS mới qua trang chi tiết thiết bị Token/Sim."
             />
           </div>
         )}
       </section>
 
+      <Pagination
+        total={rows.length}
+        page={safePage}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+      />
+
       <Modal
         open={dialogOpen}
-        title={
+        title={dialogMode === "gia_han" ? "Gia hạn CTS" : "Đổi thông tin CTS"}
+        description={
           dialogMode === "gia_han"
-            ? "Gia hạn CTS"
-            : dialogMode === "thay_doi_thong_tin"
-              ? "Đổi thông tin CTS"
-              : "Cấp mới CTS"
+            ? "Gia hạn sẽ tạo serial mới gắn với CTS gốc."
+            : "Cập nhật hồ sơ hiện hành; ngày hiệu lực và Serial giữ nguyên trừ khi cần điều chỉnh."
         }
-        description="CTS gắn với thiết bị Token/Sim. Gia hạn sẽ tạo serial mới; đổi thông tin chỉ cập nhật hồ sơ hiện hành."
         onClose={() => setDialogOpen(false)}
         className="max-w-4xl"
       >
@@ -715,6 +757,7 @@ export function CertificateListClient({
               value={String(form.so_hieu_chung_thu_so ?? "")}
               onChange={(e) => setField("so_hieu_chung_thu_so", e.target.value)}
               placeholder="Nhập serial CTS"
+              disabled={dialogMode === "thay_doi_thong_tin"}
             />
           </Field>
           <Field label="Tên CTS">
@@ -733,7 +776,7 @@ export function CertificateListClient({
             >
               <option value="">Chưa chọn</option>
               <option value="Token">Token</option>
-              <option value="Sim PKI">Sim PKI</option>
+              <option value="SIM ký số">SIM ký số</option>
               <option value="Token mật">Token mật</option>
             </Select>
           </Field>
@@ -746,15 +789,39 @@ export function CertificateListClient({
               onChange={(e) => setField("id_chung_thu_so_nguon", e.target.value)}
             />
           </Field>
-          <Field label="Ngày hiệu lực" required>
-            <Input type="date" value={String(form.ngay_hieu_luc ?? "")} onChange={(e) => setField("ngay_hieu_luc", e.target.value)} />
-          </Field>
-          <Field label="Ngày hết hiệu lực" required>
-            <Input type="date" value={String(form.ngay_het_hieu_luc ?? "")} onChange={(e) => setField("ngay_het_hieu_luc", e.target.value)} />
-          </Field>
-          <Field label="Hạn gia hạn lần đầu">
-            <Input type="date" value={String(form.han_gia_han_lan_dau ?? "")} onChange={(e) => setField("han_gia_han_lan_dau", e.target.value)} />
-          </Field>
+          {dialogMode === "thay_doi_thong_tin" ? (
+            <Field label="Thời gian thực hiện đổi thông tin">
+              <Input
+                type="date"
+                value={String(form.han_gia_han_lan_dau ?? "")}
+                onChange={(e) => setField("han_gia_han_lan_dau", e.target.value)}
+              />
+            </Field>
+          ) : (
+            <>
+              <Field label="Ngày hiệu lực" required>
+                <Input
+                  type="date"
+                  value={String(form.ngay_hieu_luc ?? "")}
+                  onChange={(e) => setField("ngay_hieu_luc", e.target.value)}
+                />
+              </Field>
+              <Field label="Ngày hết hiệu lực" required>
+                <Input
+                  type="date"
+                  value={String(form.ngay_het_hieu_luc ?? "")}
+                  onChange={(e) => setField("ngay_het_hieu_luc", e.target.value)}
+                />
+              </Field>
+              <Field label="Hạn gia hạn lần đầu">
+                <Input
+                  type="date"
+                  value={String(form.han_gia_han_lan_dau ?? "")}
+                  onChange={(e) => setField("han_gia_han_lan_dau", e.target.value)}
+                />
+              </Field>
+            </>
+          )}
           <Field label="Thông tin chung" className="md:col-span-2">
             <Input
               value={String(form.thong_tin_chung ?? "")}
@@ -763,22 +830,13 @@ export function CertificateListClient({
             />
           </Field>
           {dialogMode === "thay_doi_thong_tin" ? (
-            <>
-              <Field label="Nội dung thay đổi" className="md:col-span-2">
-                <Input
-                  value={String(form.noi_dung_thay_doi ?? "")}
-                  onChange={(e) => setField("noi_dung_thay_doi", e.target.value)}
-                  placeholder="Email, chức vụ, tổ chức..."
-                />
-              </Field>
-              <Field label="Thông tin mới" className="md:col-span-2">
-                <Input
-                  value={String(form.thong_tin_moi ?? "")}
-                  onChange={(e) => setField("thong_tin_moi", e.target.value)}
-                  placeholder="Nội dung cập nhật"
-                />
-              </Field>
-            </>
+            <Field label="Nội dung thay đổi" className="md:col-span-2">
+              <Input
+                value={String(form.noi_dung_thay_doi ?? "")}
+                onChange={(e) => setField("noi_dung_thay_doi", e.target.value)}
+                placeholder="Email, chức vụ, tổ chức..."
+              />
+            </Field>
           ) : null}
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -794,12 +852,16 @@ export function CertificateListClient({
       <Modal
         open={importOpen}
         title="Import Excel CTS"
-        description="Chỉ các dòng khớp mã thiết bị và người sử dụng mới được đánh dấu sẵn sàng import."
+        description="Tải file mẫu, điền dữ liệu rồi import. Chỉ các dòng khớp mã thiết bị và người sử dụng mới được đánh dấu sẵn sàng import."
         onClose={() => setImportOpen(false)}
         className="max-w-5xl"
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={downloadTemplate}>
+              <Download className="size-4" />
+              Tải file mẫu
+            </Button>
             <Label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
               <Upload className="size-4" />
               Chọn file Excel
@@ -811,7 +873,6 @@ export function CertificateListClient({
               />
             </Label>
             <Button type="button" variant="outline" onClick={() => setImportRows([])}>
-              <SquareCheckBig className="size-4" />
               Xóa preview
             </Button>
           </div>
@@ -902,10 +963,19 @@ export function CertificateListClient({
                           {formatDate(record.ngay_hieu_luc)} đến {formatDate(record.ngay_het_hieu_luc)}
                         </p>
                         <p className="mt-1 text-xs text-slate-500">
-                          {record.da_gia_han ? "Đã gia hạn" : "Chưa gia hạn"} · {record.la_hien_hanh ? "Hiện hành" : "Đã thay thế"}
+                          {record.da_gia_han ? "Đã gia hạn" : "Chưa gia hạn"} ·{" "}
+                          {record.la_hien_hanh ? "Hiện hành" : "Đã thay thế"}
                         </p>
                       </div>
-                      <CertificateStatusBadge status={record.la_hien_hanh ? detailTarget.trang_thai : "da_thay_the"} />
+                      <CertificateStatusBadge
+                        status={
+                          record.la_hien_hanh
+                            ? detailTarget.trang_thai
+                            : record.da_gia_han
+                              ? "da_gia_han"
+                              : "het_han"
+                        }
+                      />
                     </div>
                   </div>
                 ))}
@@ -934,7 +1004,7 @@ export function CertificateListClient({
                           <td>{row.loai_su_kien}</td>
                           <td>{display(row.so_hieu_chung_thu_so_truoc)}</td>
                           <td>{display(row.so_hieu_chung_thu_so_sau)}</td>
-                          <td>{display(row.noi_dung_thay_doi ?? row.thong_tin_moi ?? row.ly_do_thu_hoi)}</td>
+                          <td>{display(row.noi_dung_thay_doi ?? row.ly_do_thu_hoi)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -942,7 +1012,7 @@ export function CertificateListClient({
                 </div>
               ) : (
                 <div className="p-4">
-                  <EmptyState title="Chưa có timeline" description="Sự kiện sẽ hiện khi cấp mới, gia hạn, đổi thông tin hoặc thu hồi." />
+                  <EmptyState title="Chưa có timeline" description="Sự kiện sẽ hiện khi gia hạn, đổi thông tin hoặc thu hồi." />
                 </div>
               )}
             </section>
@@ -959,17 +1029,32 @@ export function CertificateListClient({
         onCancel={() => {
           setRevokeTarget(null);
           setRevokeReason("");
+          setRevokeAt("");
         }}
         onConfirm={revokeSelected}
       >
-        <div className="mt-4">
-          <Label>Lý do thu hồi</Label>
-          <Input
-            value={revokeReason}
-            onChange={(e) => setRevokeReason(e.target.value)}
-            placeholder="Hết hạn, thay thiết bị, điều chuyển..."
-            className="mt-1.5"
-          />
+        <div className="mt-4 grid gap-3">
+          <div>
+            <Label>Thời gian thu hồi</Label>
+            <Input
+              type="datetime-local"
+              value={revokeAt}
+              onChange={(e) => setRevokeAt(e.target.value)}
+              className="mt-1.5"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Bỏ trống nếu muốn dùng thời điểm hiện tại của hệ thống.
+            </p>
+          </div>
+          <div>
+            <Label>Lý do thu hồi</Label>
+            <Input
+              value={revokeReason}
+              onChange={(e) => setRevokeReason(e.target.value)}
+              placeholder="Hết hạn, thay thiết bị, điều chuyển..."
+              className="mt-1.5"
+            />
+          </div>
         </div>
       </ConfirmDialog>
 

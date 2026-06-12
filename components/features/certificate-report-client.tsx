@@ -16,27 +16,14 @@ import { display, formatDate } from "@/lib/format";
 
 type ReportFilters = {
   q?: string;
-  report?: string;
-  phongBan?: string;
   trangThai?: string;
+  phongBan?: string;
   from?: string;
   to?: string;
 };
 
-const reportOptions = [
-  { value: "expiring", label: "Sắp hết hạn" },
-  { value: "renew", label: "Hết hạn chờ gia hạn" },
-  { value: "new", label: "Cần cấp mới" },
-  { value: "revoke", label: "Cần thu hồi" },
-  { value: "renewed", label: "Đã gia hạn" },
-  { value: "active", label: "Đang hiệu lực" },
-  { value: "month", label: "Hết hạn trong tháng này" },
-  { value: "quarter", label: "Hết hạn trong quý này" },
-  { value: "year", label: "Hết hạn trong năm nay" },
-  { value: "all", label: "Toàn bộ chứng thư" },
-];
-
 const excelHeaders = [
+  "STT",
   "Serial CTS",
   "ID CTS nguồn",
   "Mã thiết bị",
@@ -68,9 +55,8 @@ export function CertificateReportClient({
   const router = useRouter();
   const [filterState, setFilterState] = useState<ReportFilters>({
     q: filters.q ?? "",
-    report: filters.report ?? "month",
-    phongBan: filters.phongBan ?? "",
     trangThai: filters.trangThai ?? "all",
+    phongBan: filters.phongBan ?? "",
     from: filters.from ?? "",
     to: filters.to ?? "",
   });
@@ -88,7 +74,8 @@ export function CertificateReportClient({
     const XLSX = await import("xlsx");
     const data = [
       excelHeaders,
-      ...rows.map((row) => [
+      ...rows.map((row, index) => [
+        index + 1,
         row.so_hieu_chung_thu_so ?? "",
         row.id_chung_thu_so_nguon ?? "",
         row.so_hieu_thiet_bi ?? "",
@@ -129,7 +116,7 @@ export function CertificateReportClient({
   return (
     <div className="space-y-4">
       <section className="admin-panel p-4">
-        <div className="grid gap-3 xl:grid-cols-[minmax(220px,1fr)_220px_180px_180px_140px_140px_auto]">
+        <div className="grid gap-3 xl:grid-cols-[minmax(220px,1fr)_220px_220px_160px_160px_auto]">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <Input
@@ -140,20 +127,11 @@ export function CertificateReportClient({
             />
           </div>
           <Select
-            value={filterState.report ?? "month"}
-            onChange={(event) => setFilterState((current) => ({ ...current, report: event.target.value }))}
-          >
-            {reportOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-          <Select
             value={filterState.trangThai ?? "all"}
             onChange={(event) =>
               setFilterState((current) => ({ ...current, trangThai: event.target.value }))
             }
+            aria-label="Trạng thái CTS"
           >
             {CERTIFICATE_STATUS_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -166,8 +144,9 @@ export function CertificateReportClient({
             onChange={(event) =>
               setFilterState((current) => ({ ...current, phongBan: event.target.value }))
             }
+            aria-label="Phòng ban"
           >
-            <option value="">Phòng ban</option>
+            <option value="">Tất cả phòng ban</option>
             {lookups.departments.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.ten_phong_ban}
@@ -178,24 +157,32 @@ export function CertificateReportClient({
             type="date"
             value={filterState.from ?? ""}
             onChange={(event) => setFilterState((current) => ({ ...current, from: event.target.value }))}
-            aria-label="Từ ngày"
+            aria-label="Từ ngày hết hạn"
           />
           <Input
             type="date"
             value={filterState.to ?? ""}
             onChange={(event) => setFilterState((current) => ({ ...current, to: event.target.value }))}
-            aria-label="Đến ngày"
+            aria-label="Đến ngày hết hạn"
           />
           <div className="flex gap-2">
             <Button type="button" onClick={() => applyFilters(filterState)}>
               Lọc
             </Button>
-            <Button type="button" variant="outline" size="icon" onClick={() => router.push("/dashboard/bao-cao?nhom=chung-thu-so")}>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={() => router.push("/dashboard/bao-cao?nhom=chung-thu-so")}
+              aria-label="Đặt lại"
+            >
               <RotateCcw className="size-4" />
-              <span className="sr-only">Đặt lại</span>
             </Button>
           </div>
         </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Bộ lọc thời gian áp dụng theo “Ngày hết hiệu lực” của CTS.
+        </p>
       </section>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -212,6 +199,7 @@ export function CertificateReportClient({
             <table className="admin-table min-w-[1520px]">
               <thead>
                 <tr>
+                  <th className="w-12">STT</th>
                   <th>Serial CTS</th>
                   <th>Thiết bị</th>
                   <th>Tên CTS</th>
@@ -226,12 +214,16 @@ export function CertificateReportClient({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row, index) => (
                   <tr key={`${row.thiet_bi_chung_thu_so_id}-${row.thiet_bi_id}`}>
+                    <td className="text-slate-500">{index + 1}</td>
                     <td className="font-medium text-slate-950">{display(row.so_hieu_chung_thu_so)}</td>
                     <td>
                       {row.thiet_bi_id ? (
-                        <Link href={`/dashboard/thiet-bi/${row.thiet_bi_id}`} className="font-medium text-primary hover:underline">
+                        <Link
+                          href={`/dashboard/thiet-bi/${row.thiet_bi_id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
                           {display(row.so_hieu_thiet_bi)} - {display(row.ten_thiet_bi)}
                         </Link>
                       ) : (
@@ -265,7 +257,7 @@ export function CertificateReportClient({
           <div className="p-5">
             <EmptyState
               title="Không có dữ liệu báo cáo"
-              description="Thử đổi kỳ báo cáo hoặc đặt lại bộ lọc để xem toàn bộ chứng thư."
+              description="Thử đổi bộ lọc trạng thái, phòng ban, hoặc khoảng thời gian."
             />
           </div>
         )}
