@@ -136,8 +136,17 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
   try {
     const supabase = await createClient();
     const id = idValue(input);
+    let maThietBi = toOptionalString(String(input.ma_thiet_bi ?? ""));
+    if (!id && !maThietBi) {
+      const { data: generated, error: genError } = await supabase.rpc("gen_ma_thiet_bi");
+      if (genError) throw genError;
+      if (generated) maThietBi = String(generated);
+    }
+    if (!maThietBi) {
+      throw new Error("Không thể sinh mã thiết bị. Vui lòng thử lại.");
+    }
     const payload = {
-      ma_thiet_bi: requiredText(input, "ma_thiet_bi", "mã thiết bị"),
+      ma_thiet_bi: maThietBi,
       ten_thiet_bi: requiredText(input, "ten_thiet_bi", "tên thiết bị"),
       loai_thiet_bi_id: requiredNumber(input, "loai_thiet_bi_id", "loại thiết bị"),
       hang_model_id: nullableNumber(input, "hang_model_id"),
@@ -909,12 +918,12 @@ export async function importDevicesAction(rows: EntityInput[]): Promise<ActionRe
     const errors: string[] = [];
 
     for (const [index, row] of rows.entries()) {
-      const ma = toOptionalString(String(row.ma_thiet_bi ?? ""));
+      let ma = toOptionalString(String(row.ma_thiet_bi ?? ""));
       const ten = toOptionalString(String(row.ten_thiet_bi ?? ""));
       const loaiText = toOptionalString(String(row.loai_thiet_bi ?? ""));
-      if (!ma || !ten || !loaiText) {
+      if (!ten || !loaiText) {
         skipped += 1;
-        errors.push(`Dòng ${index + 1}: thiếu mã/tên/loại thiết bị.`);
+        errors.push(`Dòng ${index + 1}: thiếu tên/loại thiết bị.`);
         continue;
       }
       const loai = findDeviceType(loaiText);
@@ -928,6 +937,20 @@ export async function importDevicesAction(rows: EntityInput[]): Promise<ActionRe
       const source = findSource(toOptionalString(String(row.nguon_goc ?? "")));
       const user = findStaff(toOptionalString(String(row.nguoi_su_dung ?? "")));
       const model = findModel(toOptionalString(String(row.hang_model ?? "")));
+      if (!ma) {
+        const { data: generated, error: genError } = await supabase.rpc("gen_ma_thiet_bi");
+        if (genError) {
+          skipped += 1;
+          errors.push(`Dòng ${index + 1}: ${genError.message}`);
+          continue;
+        }
+        ma = generated ? String(generated) : null;
+        if (!ma) {
+          skipped += 1;
+          errors.push(`Dòng ${index + 1}: không thể sinh mã thiết bị.`);
+          continue;
+        }
+      }
       const payload = {
         ma_thiet_bi: ma,
         ten_thiet_bi: ten,

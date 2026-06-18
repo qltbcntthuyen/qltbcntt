@@ -140,7 +140,7 @@ const TEMPLATE_HEADERS = [
 ];
 
 const TEMPLATE_HEADER_LABELS: Record<string, string> = {
-  ma_thiet_bi: "Mã thiết bị (bắt buộc)",
+  ma_thiet_bi: "Mã thiết bị (bỏ trống để tự sinh)",
   ten_thiet_bi: "Tên thiết bị (bắt buộc)",
   loai_thiet_bi: "Loại thiết bị (bắt buộc - khớp danh mục)",
   hang_model: "Hãng/Model",
@@ -287,6 +287,7 @@ export function DeviceListClient({
       };
       const ma = get(
         "ma_thiet_bi",
+        "Mã thiết bị (bỏ trống để tự sinh)",
         "Mã thiết bị (bắt buộc)",
         "Mã thiết bị",
         "Ma thiet bi"
@@ -322,7 +323,7 @@ export function DeviceListClient({
         nhom_cds: get("nhom_cds", "Nhóm CĐS", "Nhóm CĐS (may_tinh_de_ban, laptop, may_in...)"),
         ghi_chu: get("ghi_chu", "Ghi chú"),
       };
-      const ready = Boolean(ma && ten && loai);
+      const ready = Boolean(ten && loai);
       return {
         index: index + 1,
         payload,
@@ -330,7 +331,7 @@ export function DeviceListClient({
         ten,
         loai,
         status: ready ? "ready" : "review",
-        note: ready ? "Sẵn sàng" : "Thiếu mã/tên/loại thiết bị",
+        note: ready ? (ma ? "Sẵn sàng" : "Sẽ tự sinh mã") : "Thiếu tên/loại thiết bị",
       };
     });
 
@@ -600,8 +601,19 @@ export function DeviceListClient({
         ) : null}
         <div className="space-y-5">
           <FormSection title="Thông tin nhận diện">
-            <Field label="Mã thiết bị" required>
-              <Input value={String(form.ma_thiet_bi ?? "")} onChange={(e) => setField("ma_thiet_bi", e.target.value)} />
+            <Field label="Mã thiết bị">
+              <Input
+                value={String(form.ma_thiet_bi ?? "")}
+                readOnly
+                disabled
+                placeholder={form.id ? "" : "Tự sinh dạng TB001 khi lưu"}
+                className="font-mono"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                {form.id
+                  ? "Mã thiết bị là duy nhất và không sửa được sau khi tạo."
+                  : "Hệ thống tự sinh mã thiết bị tăng dần (TB001, TB002...) khi lưu."}
+              </p>
             </Field>
             <Field label="Tên thiết bị" required>
               <Input value={String(form.ten_thiet_bi ?? "")} onChange={(e) => setField("ten_thiet_bi", e.target.value)} />

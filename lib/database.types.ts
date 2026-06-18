@@ -464,6 +464,10 @@ export type Database = {
       };
     };
     Functions: {
+      gen_ma_thiet_bi: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       gen_ma_nhan_su: {
         Args: Record<string, never>;
         Returns: string;
