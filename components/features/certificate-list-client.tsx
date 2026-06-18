@@ -147,6 +147,15 @@ function toInputDate(value: unknown) {
   return String(value);
 }
 
+function suggestRenewStartDate(endDate: unknown) {
+  const normalized = toInputDate(endDate);
+  if (!normalized) return "";
+  const parsed = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  parsed.setDate(parsed.getDate() + 1);
+  return parsed.toISOString().slice(0, 10);
+}
+
 function pickText(row: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = row[key];
@@ -252,6 +261,7 @@ export function CertificateListClient({
   const [form, setForm] = useState<EntityInput>(emptyCertificate);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMode, setDialogMode] = useState<"cap_moi" | "gia_han" | "thay_doi_thong_tin">("cap_moi");
+  const [renewSource, setRenewSource] = useState<Certificate | null>(null);
   const [detailTarget, setDetailTarget] = useState<CertificateReportRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CertificateReportRow | null>(null);
   const [revokeTarget, setRevokeTarget] = useState<CertificateReportRow | null>(null);
@@ -295,6 +305,12 @@ export function CertificateListClient({
     setDetailTarget(null);
     setImportOpen(false);
     setDialogOpen(false);
+    setRenewSource(null);
+  }
+
+  function closeDialog() {
+    setDialogOpen(false);
+    setRenewSource(null);
   }
 
   function openDetail(row: CertificateReportRow) {
@@ -314,11 +330,12 @@ export function CertificateListClient({
       return;
     }
     setMessage(null);
+    setRenewSource(record);
     setDialogMode("gia_han");
     setForm({
       ...recordToInput(record, "gia_han"),
       so_hieu_chung_thu_so: "",
-      ngay_hieu_luc: "",
+      ngay_hieu_luc: suggestRenewStartDate(record.ngay_het_hieu_luc),
       ngay_het_hieu_luc: "",
     });
     setDialogOpen(true);
@@ -332,6 +349,7 @@ export function CertificateListClient({
       return;
     }
     setMessage(null);
+    setRenewSource(null);
     setDialogMode("thay_doi_thong_tin");
     setForm({
       ...recordToInput(record, "thay_doi_thong_tin"),
@@ -372,6 +390,7 @@ export function CertificateListClient({
       setMessage(result.message);
       if (result.ok) {
         setDialogOpen(false);
+        setRenewSource(null);
         router.refresh();
       }
     });
@@ -799,10 +818,10 @@ export function CertificateListClient({
         title={dialogMode === "gia_han" ? "Gia hạn CTS" : "Đổi thông tin CTS"}
         description={
           dialogMode === "gia_han"
-            ? "Gia hạn sẽ tạo serial mới gắn với CTS gốc."
-            : "Cập nhật hồ sơ hiện hành; ngày hiệu lực và Serial giữ nguyên trừ khi cần điều chỉnh."
+            ? "Tạo CTS mới với serial và thời hạn mới; CTS cũ sẽ được đánh dấu đã gia hạn."
+            : "Cập nhật hồ sơ hiện hành; serial và thời hạn giữ nguyên."
         }
-        onClose={() => setDialogOpen(false)}
+        onClose={closeDialog}
         className="max-w-4xl"
       >
         {message ? (
@@ -810,9 +829,35 @@ export function CertificateListClient({
             {message}
           </p>
         ) : null}
+        {dialogMode === "gia_han" && renewSource ? (
+          <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-950">
+            <p className="font-semibold">CTS đang gia hạn</p>
+            <p className="mt-1">
+              Serial hiện tại:{" "}
+              <span className="font-semibold">{renewSource.so_hieu_chung_thu_so}</span>
+            </p>
+            <p>
+              Hiệu lực hiện tại: {formatDate(renewSource.ngay_hieu_luc)} →{" "}
+              {formatDate(renewSource.ngay_het_hieu_luc)}
+            </p>
+            <p className="mt-2 text-sky-800">
+              Nhập <strong>serial mới</strong> và <strong>thời hạn mới</strong> bên dưới. Serial cũ không
+              được dùng lại.
+            </p>
+          </div>
+        ) : null}
+        {dialogMode === "thay_doi_thong_tin" ? (
+          <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+            Cập nhật email, tên, tổ chức hoặc thông tin chung. Serial và ngày hiệu lực giữ nguyên.
+          </div>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="Thiết bị" required>
-            <Select value={String(form.thiet_bi_id ?? "")} onChange={(e) => selectDevice(e.target.value)}>
+            <Select
+              value={String(form.thiet_bi_id ?? "")}
+              onChange={(e) => selectDevice(e.target.value)}
+              disabled={dialogMode === "gia_han"}
+            >
               <option value="">Chọn thiết bị</option>
               {certificateDevices.map((item) => (
                 <option key={item.id} value={item.id}>
@@ -831,11 +876,16 @@ export function CertificateListClient({
               ))}
             </Select>
           </Field>
-          <Field label="Serial CTS" required>
+          <Field
+            label={dialogMode === "gia_han" ? "Serial CTS mới" : "Serial CTS"}
+            required={dialogMode === "gia_han"}
+          >
             <Input
               value={String(form.so_hieu_chung_thu_so ?? "")}
               onChange={(e) => setField("so_hieu_chung_thu_so", e.target.value)}
-              placeholder="Nhập serial CTS"
+              placeholder={
+                dialogMode === "gia_han" ? "Nhập serial CTS sau gia hạn" : "Nhập serial CTS"
+              }
               disabled={dialogMode === "thay_doi_thong_tin"}
             />
           </Field>
@@ -919,11 +969,15 @@ export function CertificateListClient({
           ) : null}
         </div>
         <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+          <Button type="button" variant="outline" onClick={closeDialog}>
             Hủy
           </Button>
           <Button type="button" onClick={submitForm} disabled={isPending}>
-            {isPending ? "Đang lưu..." : "Lưu CTS"}
+            {isPending
+              ? "Đang lưu..."
+              : dialogMode === "gia_han"
+                ? "Xác nhận gia hạn"
+                : "Lưu thay đổi"}
           </Button>
         </div>
       </Modal>
