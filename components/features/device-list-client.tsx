@@ -498,7 +498,9 @@ export function DeviceListClient({
                   <th>Người sử dụng</th>
                   <th>Tình trạng</th>
                   <th>Thông tin kỹ thuật</th>
-                  <th>Đáp ứng CĐS</th>
+                  <th className="min-w-[120px] whitespace-nowrap" title="Đáp ứng yêu cầu chuyển đổi số">
+                    Đáp ứng CĐS
+                  </th>
                   <th>Thao tác</th>
                 </tr>
               </thead>
@@ -531,7 +533,7 @@ export function DeviceListClient({
                         <p className="mt-1 italic text-slate-500">{row.cau_hinh.ghi_chu}</p>
                       ) : null}
                     </td>
-                    <td>
+                    <td className="min-w-[120px] whitespace-nowrap">
                       {row.dap_ung_cds ? (
                         <span className="rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
                           Có
