@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, RotateCcw, Search, Trash2, X } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 
 import { deletePersonAction, savePersonAction, type EntityInput } from "@/app/actions/mutations";
 import {
@@ -83,12 +83,27 @@ export function PersonnelClient({
   const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
 
-  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
   const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
   const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(
+    () => paginate(rows, safePage, pageSize),
+    [rows, safePage, pageSize]
+  );
   const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
+  useEffect(() => {
+    setFilterState({
+      q: filters.q ?? "",
+      phongBan: filters.phongBan ?? "",
+      vaiTro: filters.vaiTro ?? "",
+      trangThai: filters.trangThai ?? "all",
+      taiKhoan: filters.taiKhoan ?? "all",
+    });
+    setPage(1);
+  }, [filters.q, filters.phongBan, filters.vaiTro, filters.trangThai, filters.taiKhoan]);
+
   function applyFilters(next: PersonnelFilters) {
+    setPage(1);
     const params = new URLSearchParams();
     Object.entries(next).forEach(([key, value]) => {
       if (value && value !== "all") params.set(key, value);

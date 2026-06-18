@@ -74,7 +74,26 @@ function failure(error: unknown): ActionResult {
   if (error instanceof Error) {
     return { ok: false, message: error.message };
   }
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = String((error as { message: unknown }).message);
+    if (/character varying\(20\)/i.test(message)) {
+      return {
+        ok: false,
+        message: "Mã danh mục tối đa 20 ký tự. Hãy để trống nếu không cần mã.",
+      };
+    }
+    return { ok: false, message };
+  }
   return { ok: false, message: "Không thể xử lý yêu cầu. Vui lòng thử lại." };
+}
+
+function catalogCode(input: EntityInput, key: string, label: string) {
+  const value = nullableText(input, key);
+  if (!value) return null;
+  if (value.length > 20) {
+    throw new Error(`${label} tối đa 20 ký tự. Hãy để trống nếu không cần mã.`);
+  }
+  return value;
 }
 
 export async function savePersonAction(input: EntityInput): Promise<ActionResult> {
@@ -1034,7 +1053,7 @@ export async function saveCatalogAction(
       }
       case "loai_thiet_bi": {
         const payload = {
-          ma_loai: nullableText(input, "ma"),
+          ma_loai: catalogCode(input, "ma", "Mã loại"),
           ten_loai: requiredText(input, "ten", "tên loại thiết bị"),
           ghi_chu: null,
         };
@@ -1080,7 +1099,7 @@ export async function saveCatalogAction(
       }
       case "tinh_trang_thiet_bi": {
         const payload = {
-          ma_tinh_trang: nullableText(input, "ma"),
+          ma_tinh_trang: catalogCode(input, "ma", "Mã tình trạng"),
           ten_tinh_trang: requiredText(input, "ten", "tên tình trạng"),
           ghi_chu: null,
         };
@@ -1092,7 +1111,7 @@ export async function saveCatalogAction(
       }
       case "nguon_goc_tai_san": {
         const payload = {
-          ma_nguon_goc: nullableText(input, "ma"),
+          ma_nguon_goc: catalogCode(input, "ma", "Mã nguồn gốc"),
           ten_nguon_goc: requiredText(input, "ten", "tên nguồn gốc"),
           ghi_chu: null,
         };

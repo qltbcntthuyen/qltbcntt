@@ -276,9 +276,12 @@ export function CertificateListClient({
   const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
 
-  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
   const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
   const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(
+    () => paginate(rows, safePage, pageSize),
+    [rows, safePage, pageSize]
+  );
   const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function applyFilters(next: CertificateFilters) {

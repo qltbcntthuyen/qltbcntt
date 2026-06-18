@@ -191,9 +191,12 @@ export function DeviceListClient({
   const unassignedCount = rows.filter((row) => row.nguoi_su_dung_id == null).length;
   const cdsCount = rows.filter((row) => row.dap_ung_cds).length;
 
-  const pageRows = useMemo(() => paginate(rows, page, pageSize), [rows, page, pageSize]);
   const totalPages = pageSize > 0 ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
   const safePage = Math.min(page, totalPages);
+  const pageRows = useMemo(
+    () => paginate(rows, safePage, pageSize),
+    [rows, safePage, pageSize]
+  );
   const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
 
   function applyFilters(next: DeviceFilters) {

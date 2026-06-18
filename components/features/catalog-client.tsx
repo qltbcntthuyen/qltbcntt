@@ -63,6 +63,13 @@ const emptyCatalog: EntityInput = {
   phu: "",
 };
 
+const autoCodeKinds: CatalogKind[] = ["phong_ban"];
+
+function showCatalogCodeField(kind: CatalogKind, isEdit: boolean) {
+  if (isEdit) return Boolean(fieldLabels[kind].code);
+  return autoCodeKinds.includes(kind);
+}
+
 function rowToInput(row: CatalogRow): EntityInput {
   return {
     id: row.id,
@@ -239,9 +246,17 @@ export function CatalogClient({
           </p>
         ) : null}
         <div className="grid gap-4">
-          {labels.code ? (
-            <Field label={labels.code}>
-              <Input value={String(form.ma ?? "")} onChange={(e) => setField("ma", e.target.value)} />
+          {showCatalogCodeField(kind, Boolean(form.id)) ? (
+            <Field label={labels.code!}>
+              <Input
+                value={String(form.ma ?? "")}
+                onChange={(e) => setField("ma", e.target.value)}
+                disabled={Boolean(form.id) || autoCodeKinds.includes(kind)}
+                placeholder={
+                  autoCodeKinds.includes(kind) && !form.id ? "PB0001 — tự sinh khi lưu" : undefined
+                }
+                maxLength={20}
+              />
             </Field>
           ) : null}
           <Field label={labels.name} required>

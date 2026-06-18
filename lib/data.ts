@@ -309,7 +309,7 @@ export async function getDevices(filters: {
     lookups,
     rows: rows.filter((row) => {
       if (filters.loai && row.loai_thiet_bi_id !== Number(filters.loai)) return false;
-      if (filters.phongBan && row.phong_ban_id !== Number(filters.phongBan)) return false;
+      if (filters.phongBan && Number(row.phong_ban_id) !== Number(filters.phongBan)) return false;
       if (filters.tinhTrang && row.tinh_trang_id !== Number(filters.tinhTrang)) return false;
       if (filters.nguoiDung === "none" && row.nguoi_su_dung_id != null) return false;
       if (
@@ -539,7 +539,7 @@ export async function getPersonnel(filters: {
       };
     })
     .filter((row) => {
-      if (filters.phongBan && row.phong_ban_id !== Number(filters.phongBan)) return false;
+      if (filters.phongBan && Number(row.phong_ban_id) !== Number(filters.phongBan)) return false;
       if (filters.vaiTro && row.vai_tro !== filters.vaiTro) return false;
       if (filters.trangThai === "active" && !row.trang_thai) return false;
       if (filters.trangThai === "inactive" && row.trang_thai) return false;
