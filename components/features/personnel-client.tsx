@@ -22,6 +22,7 @@ import { Select } from "@/components/ui/select";
 import { ROLE_LABELS } from "@/lib/constants";
 import type { LookupData, StaffItem } from "@/lib/data";
 import { display, formatDate } from "@/lib/format";
+import { runTransitionAction } from "@/lib/utils";
 
 type PersonnelFilters = {
   q?: string;
@@ -102,17 +103,25 @@ export function PersonnelClient({
   function openCreate() {
     setMessage(null);
     setForm(emptyPerson);
+    setSelectedPerson(null);
     setDialogOpen(true);
   }
 
   function openEdit(row: StaffItem) {
     setMessage(null);
     setForm(rowToInput(row));
+    setSelectedPerson(null);
     setDialogOpen(true);
   }
 
+  function openPersonDetail(row: StaffItem) {
+    setDialogOpen(false);
+    setDeleteTarget(null);
+    setSelectedPerson(row);
+  }
+
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await savePersonAction(form);
       setMessage(result.message);
       if (result.ok) {
@@ -124,7 +133,7 @@ export function PersonnelClient({
 
   function deleteSelected() {
     if (!deleteTarget) return;
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await deletePersonAction(deleteTarget.id);
       setMessage(result.message);
       setDeleteTarget(null);
@@ -234,13 +243,13 @@ export function PersonnelClient({
               </thead>
               <tbody>
                 {pageRows.map((row, index) => (
-                  <tr key={row.id} className="cursor-pointer" onClick={() => setSelectedPerson(row)}>
+                  <tr key={row.id} className="cursor-pointer" onClick={() => openPersonDetail(row)}>
                     <td className="text-slate-500">{baseIndex + index + 1}</td>
                     <td className="font-medium text-slate-950">
                       <button
                         type="button"
                         className="text-left font-semibold text-slate-950 hover:text-primary hover:underline"
-                        onClick={() => setSelectedPerson(row)}
+                        onClick={() => openPersonDetail(row)}
                       >
                         {row.ho_ten}
                       </button>

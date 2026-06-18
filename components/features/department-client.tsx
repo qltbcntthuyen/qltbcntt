@@ -19,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import type { DepartmentItem } from "@/lib/data";
 import { display } from "@/lib/format";
+import { runTransitionAction } from "@/lib/utils";
 
 const emptyDepartment: EntityInput = {
   ma: "",
@@ -58,7 +59,7 @@ export function DepartmentClient({ rows }: { rows: DepartmentItem[] }) {
   }
 
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveCatalogAction("phong_ban", form);
       setMessage(result.message);
       if (result.ok) {
@@ -70,7 +71,7 @@ export function DepartmentClient({ rows }: { rows: DepartmentItem[] }) {
 
   function deleteSelected() {
     if (!deleteTarget) return;
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await deleteCatalogAction("phong_ban", deleteTarget.id);
       setMessage(result.message);
       setDeleteTarget(null);

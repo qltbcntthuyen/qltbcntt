@@ -25,7 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MAINTENANCE_TYPES } from "@/lib/constants";
 import type { HandoverItem, LookupData, MaintenanceItem } from "@/lib/data";
 import { display, formatCurrency, formatDate, normalizeText, todayInputValue } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn, runTransitionAction } from "@/lib/utils";
 
 type OperationMode = "ban-giao" | "bao-tri";
 
@@ -146,7 +146,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
   }
 
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result =
         data.active === "ban-giao"
           ? await saveHandoverAction(form)
@@ -160,7 +160,7 @@ export function OperationsClient({ data }: { data: OperationsData }) {
   }
 
   function confirmDelete() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = deleteHandover
         ? await deleteHandoverAction(deleteHandover.id)
         : deleteMaintenance

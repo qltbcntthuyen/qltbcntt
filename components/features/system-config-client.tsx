@@ -7,6 +7,7 @@ import { saveSystemConfigAction } from "@/app/actions/mutations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { runTransitionAction } from "@/lib/utils";
 
 export function SystemConfigClient({
   defaults,
@@ -18,7 +19,7 @@ export function SystemConfigClient({
   const [isPending, startTransition] = useTransition();
 
   function submit() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveSystemConfigAction({ cts_canh_bao_so_ngay: days });
       setMessage(result.message);
     });

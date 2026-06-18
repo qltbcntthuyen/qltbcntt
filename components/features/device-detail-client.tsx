@@ -36,6 +36,7 @@ import type {
   MaintenanceItem,
 } from "@/lib/data";
 import { display, formatCurrency, formatDate, formatDateTime } from "@/lib/format";
+import { runTransitionAction } from "@/lib/utils";
 
 type DeviceDetailData = {
   device: DeviceListItem;
@@ -77,7 +78,7 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
   }
 
   function saveConfig() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveComputerConfigAction(form);
       setMessage(result.message);
       if (result.ok) router.refresh();

@@ -37,6 +37,7 @@ import { Select } from "@/components/ui/select";
 import { NHOM_CDS_LABELS, NHOM_CDS_OPTIONS } from "@/lib/constants";
 import type { DeviceListItem, LookupData } from "@/lib/data";
 import { display } from "@/lib/format";
+import { runTransitionAction } from "@/lib/utils";
 
 type DeviceFilters = {
   q?: string;
@@ -208,20 +209,27 @@ export function DeviceListClient({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function closeOverlayPanels() {
+    setDialogOpen(false);
+    setImportOpen(false);
+  }
+
   function openCreate() {
     setMessage(null);
     setForm(emptyDevice);
+    closeOverlayPanels();
     setDialogOpen(true);
   }
 
   function openEdit(row: DeviceListItem) {
     setMessage(null);
     setForm(deviceToInput(row));
+    closeOverlayPanels();
     setDialogOpen(true);
   }
 
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveDeviceAction(form);
       setMessage(result.message);
       if (result.ok) {
@@ -233,7 +241,7 @@ export function DeviceListClient({
 
   function deleteSelected() {
     if (!deleteTarget) return;
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await deleteDeviceAction(deleteTarget.id);
       setMessage(result.message);
       setDeleteTarget(null);
@@ -336,6 +344,7 @@ export function DeviceListClient({
     });
 
     setImportRows(mapped);
+    closeOverlayPanels();
     setImportOpen(true);
     setImportMessage(`Đã đọc ${mapped.length} dòng từ file ${file.name}.`);
   }
@@ -346,10 +355,12 @@ export function DeviceListClient({
       setImportMessage("Không có dòng nào sẵn sàng để import.");
       return;
     }
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await importDevicesAction(ready);
       setImportMessage(result.message);
       if (result.ok) {
+        setImportOpen(false);
+        setImportRows([]);
         router.refresh();
       }
     });
@@ -464,6 +475,7 @@ export function DeviceListClient({
             onClick={() => {
               setImportRows([]);
               setImportMessage(null);
+              closeOverlayPanels();
               setImportOpen(true);
             }}
           >

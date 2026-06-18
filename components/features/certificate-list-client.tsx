@@ -15,7 +15,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import {
   deleteCertificateAction,
@@ -39,7 +39,8 @@ import type {
   CertificateReportRow,
   LookupData,
 } from "@/lib/data";
-import { display, formatDate, formatDateTime, normalizeText } from "@/lib/format";
+import { display, formatDate, formatDateTime, normalizeText, toNumberOrNull } from "@/lib/format";
+import { runTransitionAction } from "@/lib/utils";
 
 type CertificateFilters = {
   q?: string;
@@ -99,6 +100,37 @@ function recordToInput(record: Certificate, eventType: "cap_moi" | "gia_han" | "
   } satisfies EntityInput;
 }
 
+function resolveCertificateRecordId(
+  row: CertificateReportRow | null | undefined,
+  records: Certificate[]
+): number | null {
+  if (!row) return null;
+
+  const direct = toNumberOrNull(row.thiet_bi_chung_thu_so_id);
+  if (direct != null) return direct;
+
+  const serial = row.so_hieu_chung_thu_so?.trim();
+  const deviceId = toNumberOrNull(row.thiet_bi_id);
+  if (!serial) return null;
+
+  const matches = records.filter((record) => record.so_hieu_chung_thu_so === serial);
+  if (deviceId != null) {
+    const scoped = matches.find((record) => record.thiet_bi_id === deviceId);
+    if (scoped) return scoped.id;
+  }
+
+  return matches[0]?.id ?? null;
+}
+
+function findCertificateRecord(
+  row: CertificateReportRow | null | undefined,
+  recordMap: Map<number, Certificate>,
+  records: Certificate[]
+) {
+  const id = resolveCertificateRecordId(row, records);
+  return id != null ? recordMap.get(id) ?? records.find((record) => record.id === id) ?? null : null;
+}
+
 function toInputDate(value: unknown) {
   if (!value) return "";
   if (typeof value === "string") {
@@ -155,7 +187,14 @@ export function CertificateListClient({
   filters: CertificateFilters;
 }) {
   const router = useRouter();
-  const recordMap = useMemo(() => new Map(records.map((item) => [item.id, item])), [records]);
+  const messageRef = useRef<HTMLParagraphElement>(null);
+  const recordMap = useMemo(() => {
+    const map = new Map<number, Certificate>();
+    for (const item of records) {
+      map.set(Number(item.id), item);
+    }
+    return map;
+  }, [records]);
   const typeMap = useMemo(
     () => new Map(lookups.deviceTypes.map((item) => [item.id, item])),
     [lookups.deviceTypes]
@@ -173,10 +212,11 @@ export function CertificateListClient({
   const historyByRecord = useMemo(() => {
     const map = new Map<number, CertificateHistory[]>();
     for (const item of history) {
-      if (item.thiet_bi_chung_thu_so_id == null) continue;
-      const current = map.get(item.thiet_bi_chung_thu_so_id) ?? [];
+      const recordId = toNumberOrNull(item.thiet_bi_chung_thu_so_id);
+      if (recordId == null) continue;
+      const current = map.get(recordId) ?? [];
       current.push(item);
-      map.set(item.thiet_bi_chung_thu_so_id, current);
+      map.set(recordId, current);
     }
     return map;
   }, [history]);
@@ -217,6 +257,7 @@ export function CertificateListClient({
   const [revokeTarget, setRevokeTarget] = useState<CertificateReportRow | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [revokeAt, setRevokeAt] = useState("");
+  const [revokeMessage, setRevokeMessage] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importRows, setImportRows] = useState<ImportPreviewRow[]>([]);
@@ -243,15 +284,33 @@ export function CertificateListClient({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function notify(messageText: string) {
+    setMessage(messageText);
+    requestAnimationFrame(() => {
+      messageRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
+  function closeOverlayPanels() {
+    setDetailTarget(null);
+    setImportOpen(false);
+    setDialogOpen(false);
+  }
+
+  function openDetail(row: CertificateReportRow) {
+    closeOverlayPanels();
+    setDetailTarget(row);
+  }
+
   function openRenew(row: CertificateReportRow) {
-    const id = row.thiet_bi_chung_thu_so_id;
-    const record = id ? recordMap.get(id) : null;
+    closeOverlayPanels();
+    const record = findCertificateRecord(row, recordMap, records);
     if (!record) {
-      setMessage("Không tìm thấy CTS gốc để gia hạn.");
+      notify("Không tìm thấy CTS gốc để gia hạn.");
       return;
     }
     if (record.da_gia_han || record.chung_thu_goc_id) {
-      setMessage("CTS này đã được gia hạn một lần. Hãy thu hồi để cấp serial mới.");
+      notify("CTS này đã được gia hạn một lần. Hãy thu hồi để cấp serial mới.");
       return;
     }
     setMessage(null);
@@ -266,10 +325,10 @@ export function CertificateListClient({
   }
 
   function openChangeInfo(row: CertificateReportRow) {
-    const id = row.thiet_bi_chung_thu_so_id;
-    const record = id ? recordMap.get(id) : null;
+    closeOverlayPanels();
+    const record = findCertificateRecord(row, recordMap, records);
     if (!record) {
-      setMessage("Không tìm thấy CTS cần đổi thông tin.");
+      notify("Không tìm thấy CTS cần đổi thông tin.");
       return;
     }
     setMessage(null);
@@ -308,7 +367,7 @@ export function CertificateListClient({
   }
 
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveCertificateAction(form);
       setMessage(result.message);
       if (result.ok) {
@@ -319,26 +378,38 @@ export function CertificateListClient({
   }
 
   function revokeSelected() {
-    const id = revokeTarget?.thiet_bi_chung_thu_so_id;
-    if (!id) return;
-    startTransition(async () => {
+    const id = resolveCertificateRecordId(revokeTarget, records);
+    if (!id) {
+      setRevokeMessage("Không xác định được CTS cần thu hồi.");
+      return;
+    }
+
+    runTransitionAction(startTransition, async () => {
       const result = await revokeCertificateAction({
         id,
         ly_do_thu_hoi: revokeReason,
         thoi_diem_thu_hoi: revokeAt,
       });
       setMessage(result.message);
-      setRevokeTarget(null);
-      setRevokeReason("");
-      setRevokeAt("");
-      if (result.ok) router.refresh();
+      if (result.ok) {
+        setRevokeTarget(null);
+        setRevokeReason("");
+        setRevokeAt("");
+        setRevokeMessage(null);
+        router.refresh();
+        return;
+      }
+      setRevokeMessage(result.message);
     });
   }
 
   function deleteSelected() {
-    const id = deleteTarget?.thiet_bi_chung_thu_so_id;
-    if (!id) return;
-    startTransition(async () => {
+    const id = resolveCertificateRecordId(deleteTarget, records);
+    if (!id) {
+      notify("Không xác định được CTS cần xóa.");
+      return;
+    }
+    runTransitionAction(startTransition, async () => {
       const result = await deleteCertificateAction(id);
       setMessage(result.message);
       setDeleteTarget(null);
@@ -444,6 +515,7 @@ export function CertificateListClient({
     });
 
     setImportRows(mapped);
+    closeOverlayPanels();
     setImportOpen(true);
     setImportMessage(`Đã đọc ${mapped.length} dòng từ file ${file.name}.`);
   }
@@ -454,7 +526,7 @@ export function CertificateListClient({
       setImportMessage("Không có dòng nào sẵn sàng để import.");
       return;
     }
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await importCertificatesAction(readyRows);
       setImportMessage(result.message);
       if (result.ok) {
@@ -465,9 +537,8 @@ export function CertificateListClient({
     });
   }
 
-  const currentDetailHistory = detailTarget?.thiet_bi_chung_thu_so_id
-    ? historyByRecord.get(detailTarget.thiet_bi_chung_thu_so_id) ?? []
-    : [];
+  const detailRecordId = resolveCertificateRecordId(detailTarget, records);
+  const currentDetailHistory = detailRecordId ? historyByRecord.get(detailRecordId) ?? [] : [];
   const currentDeviceRecords =
     detailTarget?.thiet_bi_id != null ? currentRecordsByDevice.get(detailTarget.thiet_bi_id) ?? [] : [];
 
@@ -563,7 +634,7 @@ export function CertificateListClient({
             <FileText className="size-4" />
             File mẫu Excel
           </Button>
-          <Button type="button" variant="outline" onClick={() => setImportOpen(true)}>
+          <Button type="button" variant="outline" onClick={() => { closeOverlayPanels(); setImportOpen(true); }}>
             <Upload className="size-4" />
             Import Excel
           </Button>
@@ -575,7 +646,10 @@ export function CertificateListClient({
       </div>
 
       {message ? (
-        <p className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+        <p
+          ref={messageRef}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+        >
           {message}
         </p>
       ) : null}
@@ -607,7 +681,7 @@ export function CertificateListClient({
                       <button
                         type="button"
                         className="text-left font-semibold text-primary hover:underline"
-                        onClick={() => setDetailTarget(row)}
+                        onClick={() => openDetail(row)}
                       >
                         {display(row.so_hieu_chung_thu_so)}
                       </button>
@@ -670,6 +744,8 @@ export function CertificateListClient({
                           variant="outline"
                           size="sm"
                           onClick={() => {
+                            closeOverlayPanels();
+                            setRevokeMessage(null);
                             setRevokeTarget(row);
                             setRevokeAt(new Date().toISOString().slice(0, 16));
                           }}
@@ -682,7 +758,10 @@ export function CertificateListClient({
                           type="button"
                           variant="destructive"
                           size="sm"
-                          onClick={() => setDeleteTarget(row)}
+                          onClick={() => {
+                            closeOverlayPanels();
+                            setDeleteTarget(row);
+                          }}
                         >
                           <Trash2 className="size-4" />
                           Xóa
@@ -1030,9 +1109,15 @@ export function CertificateListClient({
           setRevokeTarget(null);
           setRevokeReason("");
           setRevokeAt("");
+          setRevokeMessage(null);
         }}
         onConfirm={revokeSelected}
       >
+        {revokeMessage ? (
+          <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {revokeMessage}
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3">
           <div>
             <Label>Thời gian thu hồi</Label>

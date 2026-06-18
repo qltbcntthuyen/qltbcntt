@@ -14,7 +14,7 @@ import { Modal, ConfirmDialog } from "@/components/ui/modal";
 import { CATALOG_OPTIONS, type CatalogKind } from "@/lib/constants";
 import type { CatalogRow } from "@/lib/data";
 import { display } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn, runTransitionAction } from "@/lib/utils";
 
 const fieldLabels: Record<
   CatalogKind,
@@ -113,7 +113,7 @@ export function CatalogClient({
   }
 
   function submitForm() {
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await saveCatalogAction(kind, form);
       setMessage(result.message);
       if (result.ok) {
@@ -125,7 +125,7 @@ export function CatalogClient({
 
   function deleteSelected() {
     if (!deleteTarget) return;
-    startTransition(async () => {
+    runTransitionAction(startTransition, async () => {
       const result = await deleteCatalogAction(kind, deleteTarget.id);
       setMessage(result.message);
       setDeleteTarget(null);

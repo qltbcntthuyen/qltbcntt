@@ -11,6 +11,7 @@ export function Modal({
   children,
   onClose,
   className,
+  layer = "default",
 }: {
   open: boolean;
   title: string;
@@ -18,11 +19,17 @@ export function Modal({
   children: React.ReactNode;
   onClose: () => void;
   className?: string;
+  layer?: "default" | "top";
 }) {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+    <div
+      className={cn(
+        "fixed inset-0 flex items-center justify-center bg-slate-950/40 p-4",
+        layer === "top" ? "z-[60]" : "z-50"
+      )}
+    >
       <div
         role="dialog"
         aria-modal="true"
@@ -73,21 +80,34 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Modal open={open} title={title} description={description} onClose={onCancel} className="max-w-md">
-      {children}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          Hủy
-        </Button>
-        <Button
-          type="button"
-          variant={tone === "danger" ? "destructive" : "default"}
-          onClick={onConfirm}
-          disabled={pending}
-        >
-          {pending ? "Đang xử lý..." : confirmLabel}
-        </Button>
-      </div>
+    <Modal
+      open={open}
+      title={title}
+      description={description}
+      onClose={onCancel}
+      className="max-w-md"
+      layer="top"
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!pending) onConfirm();
+        }}
+      >
+        {children}
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+            Hủy
+          </Button>
+          <Button
+            type="submit"
+            variant={tone === "danger" ? "destructive" : "default"}
+            disabled={pending}
+          >
+            {pending ? "Đang xử lý..." : confirmLabel}
+          </Button>
+        </div>
+      </form>
     </Modal>
   );
 }
