@@ -177,9 +177,6 @@ export function DepartmentClient({ rows }: { rows: DepartmentItem[] }) {
               placeholder={form.id ? "" : "PB0001"}
               className="font-mono"
             />
-            <p className="mt-1 text-xs text-slate-500">
-              Mã tự sinh, không chỉnh sửa.
-            </p>
           </Field>
           <Field label="Tên phòng ban" required>
             <Input

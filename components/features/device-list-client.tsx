@@ -611,30 +611,33 @@ export function DeviceListClient({
                 placeholder={form.id ? "" : "TB0001"}
                 className="font-mono"
               />
-              <p className="mt-1 text-xs text-slate-500">
-                Mã tự sinh, không chỉnh sửa.
-              </p>
             </Field>
             <Field label="Tên thiết bị" required>
               <Input value={String(form.ten_thiet_bi ?? "")} onChange={(e) => setField("ten_thiet_bi", e.target.value)} />
             </Field>
             <Field label="Loại thiết bị" required>
-              <Select value={String(form.loai_thiet_bi_id ?? "")} onChange={(e) => setField("loai_thiet_bi_id", e.target.value)}>
-                <option value="">Chọn loại</option>
-                {lookups.deviceTypes.map((item) => (
-                  <option key={item.id} value={item.id}>{item.ten_loai}</option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.loai_thiet_bi_id ?? "")} onChange={(e) => setField("loai_thiet_bi_id", e.target.value)}>
+                  <option value="">Chọn loại</option>
+                  {lookups.deviceTypes.map((item) => (
+                    <option key={item.id} value={item.id}>{item.ten_loai}</option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=loai_thiet_bi" className="w-fit">Thêm loại thiết bị</TextLinkButton>
+              </div>
             </Field>
             <Field label="Hãng/model">
-              <Select value={String(form.hang_model_id ?? "")} onChange={(e) => setField("hang_model_id", e.target.value)}>
-                <option value="">Chưa chọn</option>
-                {lookups.models.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {[item.ten_hang, item.ten_model].filter(Boolean).join(" ")}
-                  </option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.hang_model_id ?? "")} onChange={(e) => setField("hang_model_id", e.target.value)}>
+                  <option value="">Chưa chọn</option>
+                  {lookups.models.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {[item.ten_hang, item.ten_model].filter(Boolean).join(" ")}
+                    </option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=hang_model" className="w-fit">Thêm hãng/model</TextLinkButton>
+              </div>
             </Field>
             <Field label="Serial">
               <Input value={String(form.serial ?? "")} onChange={(e) => setField("serial", e.target.value)} />
@@ -652,20 +655,26 @@ export function DeviceListClient({
               <Input type="date" value={String(form.ngay_tiep_nhan ?? "")} onChange={(e) => setField("ngay_tiep_nhan", e.target.value)} />
             </Field>
             <Field label="Nguồn gốc">
-              <Select value={String(form.nguon_goc_id ?? "")} onChange={(e) => setField("nguon_goc_id", e.target.value)}>
-                <option value="">Chưa chọn</option>
-                {lookups.sources.map((item) => (
-                  <option key={item.id} value={item.id}>{item.ten_nguon_goc}</option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.nguon_goc_id ?? "")} onChange={(e) => setField("nguon_goc_id", e.target.value)}>
+                  <option value="">Chưa chọn</option>
+                  {lookups.sources.map((item) => (
+                    <option key={item.id} value={item.id}>{item.ten_nguon_goc}</option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=nguon_goc_tai_san" className="w-fit">Thêm nguồn gốc</TextLinkButton>
+              </div>
             </Field>
             <Field label="Tình trạng">
-              <Select value={String(form.tinh_trang_id ?? "")} onChange={(e) => setField("tinh_trang_id", e.target.value)}>
-                <option value="">Chưa chọn</option>
-                {lookups.statuses.map((item) => (
-                  <option key={item.id} value={item.id}>{item.ten_tinh_trang}</option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.tinh_trang_id ?? "")} onChange={(e) => setField("tinh_trang_id", e.target.value)}>
+                  <option value="">Chưa chọn</option>
+                  {lookups.statuses.map((item) => (
+                    <option key={item.id} value={item.id}>{item.ten_tinh_trang}</option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=tinh_trang_thiet_bi" className="w-fit">Thêm tình trạng</TextLinkButton>
+              </div>
             </Field>
             <Field label="Phòng ban">
               <div className="space-y-2">
@@ -729,24 +738,30 @@ export function DeviceListClient({
               <Input value={String(form.man_hinh ?? "")} onChange={(e) => setField("man_hinh", e.target.value)} />
             </Field>
             <Field label="Hệ điều hành">
-              <Select value={String(form.he_dieu_hanh_id ?? "")} onChange={(e) => setField("he_dieu_hanh_id", e.target.value)}>
-                <option value="">Chưa chọn</option>
-                {lookups.operatingSystems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {[item.ten_he_dieu_hanh, item.phien_ban].filter(Boolean).join(" ")}
-                  </option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.he_dieu_hanh_id ?? "")} onChange={(e) => setField("he_dieu_hanh_id", e.target.value)}>
+                  <option value="">Chưa chọn</option>
+                  {lookups.operatingSystems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {[item.ten_he_dieu_hanh, item.phien_ban].filter(Boolean).join(" ")}
+                    </option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=he_dieu_hanh" className="w-fit">Thêm hệ điều hành</TextLinkButton>
+              </div>
             </Field>
             <Field label="Phần mềm diệt virus">
-              <Select value={String(form.phan_mem_diet_virus_id ?? "")} onChange={(e) => setField("phan_mem_diet_virus_id", e.target.value)}>
-                <option value="">Chưa chọn</option>
-                {lookups.antivirus.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {[item.ten_phan_mem, item.phien_ban].filter(Boolean).join(" ")}
-                  </option>
-                ))}
-              </Select>
+              <div className="space-y-2">
+                <Select value={String(form.phan_mem_diet_virus_id ?? "")} onChange={(e) => setField("phan_mem_diet_virus_id", e.target.value)}>
+                  <option value="">Chưa chọn</option>
+                  {lookups.antivirus.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {[item.ten_phan_mem, item.phien_ban].filter(Boolean).join(" ")}
+                    </option>
+                  ))}
+                </Select>
+                <TextLinkButton href="/dashboard/danh-muc?loai=phan_mem_diet_virus" className="w-fit">Thêm phần mềm diệt virus</TextLinkButton>
+              </div>
             </Field>
             <Field label="Ghi chú kỹ thuật" className="md:col-span-2">
               <Input

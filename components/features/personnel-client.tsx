@@ -337,9 +337,6 @@ export function PersonnelClient({
               placeholder={form.id ? "" : "NS0001"}
               className="font-mono"
             />
-            <p className="mt-1 text-xs text-slate-500">
-              Mã tự sinh, không chỉnh sửa.
-            </p>
           </Field>
           <Field label="Email">
             <Input type="email" value={String(form.email ?? "")} onChange={(e) => setField("email", e.target.value)} />

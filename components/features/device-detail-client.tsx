@@ -199,30 +199,40 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
             <Input value={String(form.man_hinh ?? "")} onChange={(e) => setField("man_hinh", e.target.value)} />
           </Field>
           <Field label="Hệ điều hành">
-            <Select
-              value={String(form.he_dieu_hanh_id ?? "")}
-              onChange={(e) => setField("he_dieu_hanh_id", e.target.value)}
-            >
-              <option value="">Chưa chọn</option>
-              {detail.lookups.operatingSystems.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {[item.ten_he_dieu_hanh, item.phien_ban].filter(Boolean).join(" ")}
-                </option>
-              ))}
-            </Select>
+            <div className="space-y-2">
+              <Select
+                value={String(form.he_dieu_hanh_id ?? "")}
+                onChange={(e) => setField("he_dieu_hanh_id", e.target.value)}
+              >
+                <option value="">Chưa chọn</option>
+                {detail.lookups.operatingSystems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {[item.ten_he_dieu_hanh, item.phien_ban].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </Select>
+              <TextLinkButton href="/dashboard/danh-muc?loai=he_dieu_hanh" className="w-fit">
+                Thêm hệ điều hành
+              </TextLinkButton>
+            </div>
           </Field>
           <Field label="Phần mềm diệt virus">
-            <Select
-              value={String(form.phan_mem_diet_virus_id ?? "")}
-              onChange={(e) => setField("phan_mem_diet_virus_id", e.target.value)}
-            >
-              <option value="">Chưa chọn</option>
-              {detail.lookups.antivirus.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {[item.ten_phan_mem, item.phien_ban].filter(Boolean).join(" ")}
-                </option>
-              ))}
-            </Select>
+            <div className="space-y-2">
+              <Select
+                value={String(form.phan_mem_diet_virus_id ?? "")}
+                onChange={(e) => setField("phan_mem_diet_virus_id", e.target.value)}
+              >
+                <option value="">Chưa chọn</option>
+                {detail.lookups.antivirus.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {[item.ten_phan_mem, item.phien_ban].filter(Boolean).join(" ")}
+                  </option>
+                ))}
+              </Select>
+              <TextLinkButton href="/dashboard/danh-muc?loai=phan_mem_diet_virus" className="w-fit">
+                Thêm phần mềm diệt virus
+              </TextLinkButton>
+            </div>
           </Field>
           <Field label="Ghi chú kỹ thuật" className="md:col-span-2 xl:col-span-3">
             <Input
