@@ -1012,8 +1012,17 @@ export async function saveCatalogAction(
 
     switch (kind) {
       case "phong_ban": {
+        let maPhongBan = toOptionalString(String(input.ma ?? ""));
+        if (!maPhongBan) {
+          const { data: generated, error: genError } = await supabase.rpc("gen_ma_phong_ban");
+          if (genError) throw genError;
+          if (generated) maPhongBan = String(generated);
+        }
+        if (!maPhongBan) {
+          throw new Error("Không thể sinh mã phòng ban. Vui lòng thử lại.");
+        }
         const payload = {
-          ma_phong_ban: nullableText(input, "ma"),
+          ma_phong_ban: maPhongBan,
           ten_phong_ban: requiredText(input, "ten", "tên phòng ban"),
           ghi_chu: null,
         };
