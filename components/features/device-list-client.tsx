@@ -608,13 +608,11 @@ export function DeviceListClient({
                 value={String(form.ma_thiet_bi ?? "")}
                 readOnly
                 disabled
-                placeholder={form.id ? "" : "Tự sinh dạng TB001 khi lưu"}
+                placeholder={form.id ? "" : "TB0001"}
                 className="font-mono"
               />
               <p className="mt-1 text-xs text-slate-500">
-                {form.id
-                  ? "Mã thiết bị là duy nhất và không sửa được sau khi tạo."
-                  : "Hệ thống tự sinh mã thiết bị tăng dần (TB001, TB002...) khi lưu."}
+                Mã tự sinh, không chỉnh sửa.
               </p>
             </Field>
             <Field label="Tên thiết bị" required>

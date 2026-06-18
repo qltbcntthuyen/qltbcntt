@@ -174,13 +174,11 @@ export function DepartmentClient({ rows }: { rows: DepartmentItem[] }) {
               value={String(form.ma ?? "")}
               readOnly
               disabled
-              placeholder={form.id ? "" : "Tự sinh dạng PB001 khi lưu"}
+              placeholder={form.id ? "" : "PB0001"}
               className="font-mono"
             />
             <p className="mt-1 text-xs text-slate-500">
-              {form.id
-                ? "Mã phòng ban là duy nhất và không sửa được sau khi tạo."
-                : "Hệ thống tự sinh mã phòng ban tăng dần (PB001, PB002...) khi lưu."}
+              Mã tự sinh, không chỉnh sửa.
             </p>
           </Field>
           <Field label="Tên phòng ban" required>

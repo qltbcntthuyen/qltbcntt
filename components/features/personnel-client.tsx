@@ -334,13 +334,11 @@ export function PersonnelClient({
               value={String(form.ten_dang_nhap ?? "")}
               readOnly
               disabled
-              placeholder={form.id ? "" : "Tự sinh dạng NS001 khi lưu"}
+              placeholder={form.id ? "" : "NS0001"}
               className="font-mono"
             />
             <p className="mt-1 text-xs text-slate-500">
-              {form.id
-                ? "Mã hồ sơ là duy nhất và không sửa được sau khi tạo."
-                : "Hệ thống tự sinh mã hồ sơ tăng dần (NS001, NS002...) khi lưu."}
+              Mã tự sinh, không chỉnh sửa.
             </p>
           </Field>
           <Field label="Email">
