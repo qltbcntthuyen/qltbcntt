@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   BadgeCheck,
   CalendarClock,
@@ -9,13 +9,14 @@ import {
   FilePenLine,
   FileText,
   FileUp,
+  Plus,
   RefreshCcw,
   Search,
   ShieldAlert,
   Trash2,
   Upload,
 } from "lucide-react";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import {
   deleteCertificateAction,
@@ -196,6 +197,7 @@ export function CertificateListClient({
   filters: CertificateFilters;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const messageRef = useRef<HTMLParagraphElement>(null);
   const recordMap = useMemo(() => {
     const map = new Map<number, Certificate>();
@@ -315,6 +317,45 @@ export function CertificateListClient({
     setDialogOpen(false);
     setRenewSource(null);
   }
+
+  function openCreate(presetDeviceId?: string) {
+    setMessage(null);
+    setRenewSource(null);
+    setDetailTarget(null);
+    setImportOpen(false);
+    setDialogMode("cap_moi");
+    const next: EntityInput = { ...emptyCertificate };
+    if (presetDeviceId) {
+      next.thiet_bi_id = presetDeviceId;
+    }
+    setForm(next);
+    if (presetDeviceId) {
+      const device = certificateDevices.find((item) => String(item.id) === presetDeviceId);
+      const staff = device?.nguoi_su_dung_id ? staffMap.get(device.nguoi_su_dung_id) : null;
+      const deviceType = device ? typeMap.get(device.loai_thiet_bi_id) : null;
+      setForm({
+        ...next,
+        nguoi_su_dung_id: device?.nguoi_su_dung_id ?? "",
+        loai_chung_thu_so:
+          deviceType?.ten_loai && /sim/i.test(deviceType.ten_loai)
+            ? "SIM ký số"
+            : deviceType?.ten_loai ?? "",
+        email: staff?.email ?? "",
+        ten_chung_thu_so: staff?.ho_ten ?? "",
+      });
+    }
+    setDialogOpen(true);
+  }
+
+  useEffect(() => {
+    if (searchParams.get("them") !== "1") return;
+    const deviceId = searchParams.get("thietBi") ?? undefined;
+    openCreate(deviceId);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("them");
+    params.delete("thietBi");
+    router.replace(`/dashboard/chung-thu-so${params.size ? `?${params}` : ""}`);
+  }, []);
 
   function openDetail(row: CertificateReportRow) {
     closeOverlayPanels();
@@ -652,6 +693,10 @@ export function CertificateListClient({
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <p className="text-sm text-slate-600">Hiển thị {rows.length} serial CTS</p>
         <div className="flex flex-wrap gap-2">
+          <Button type="button" onClick={() => openCreate()}>
+            <Plus className="size-4" />
+            Thêm CTS
+          </Button>
           <Button type="button" variant="outline" onClick={downloadTemplate}>
             <FileText className="size-4" />
             File mẫu Excel
@@ -799,7 +844,7 @@ export function CertificateListClient({
           <div className="p-5">
             <EmptyState
               title="Chưa có serial CTS phù hợp"
-              description="Thử đặt lại bộ lọc hoặc thêm CTS mới qua trang chi tiết thiết bị Token/Sim."
+              description="Thử đặt lại bộ lọc hoặc bấm Thêm CTS để cấp mới chứng thư số."
             />
           </div>
         )}
@@ -818,11 +863,19 @@ export function CertificateListClient({
 
       <Modal
         open={dialogOpen}
-        title={dialogMode === "gia_han" ? "Gia hạn CTS" : "Đổi thông tin CTS"}
+        title={
+          dialogMode === "cap_moi"
+            ? "Cấp mới CTS"
+            : dialogMode === "gia_han"
+              ? "Gia hạn CTS"
+              : "Đổi thông tin CTS"
+        }
         description={
-          dialogMode === "gia_han"
-            ? "Tạo CTS mới với serial và thời hạn mới; CTS cũ sẽ được đánh dấu đã gia hạn."
-            : "Cập nhật hồ sơ hiện hành; serial và thời hạn giữ nguyên."
+          dialogMode === "cap_moi"
+            ? "Ghi nhận chứng thư số mới gắn với thiết bị Token/SIM."
+            : dialogMode === "gia_han"
+              ? "Tạo CTS mới với serial và thời hạn mới; CTS cũ sẽ được đánh dấu đã gia hạn."
+              : "Cập nhật hồ sơ hiện hành; serial và thời hạn giữ nguyên."
         }
         onClose={closeDialog}
         className="max-w-4xl"
@@ -831,6 +884,11 @@ export function CertificateListClient({
           <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             {message}
           </p>
+        ) : null}
+        {dialogMode === "cap_moi" ? (
+          <div className="mb-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-950">
+            Chọn thiết bị Token/SIM, nhập serial và thời hạn hiệu lực của chứng thư mới.
+          </div>
         ) : null}
         {dialogMode === "gia_han" && renewSource ? (
           <div className="mb-4 rounded-md border border-sky-200 bg-sky-50 px-3 py-3 text-sm text-sky-950">
@@ -881,7 +939,7 @@ export function CertificateListClient({
           </Field>
           <Field
             label={dialogMode === "gia_han" ? "Serial CTS mới" : "Serial CTS"}
-            required={dialogMode === "gia_han"}
+            required={dialogMode !== "thay_doi_thong_tin"}
           >
             <Input
               value={String(form.so_hieu_chung_thu_so ?? "")}
@@ -980,7 +1038,9 @@ export function CertificateListClient({
               ? "Đang lưu..."
               : dialogMode === "gia_han"
                 ? "Xác nhận gia hạn"
-                : "Lưu thay đổi"}
+                : dialogMode === "cap_moi"
+                  ? "Lưu CTS"
+                  : "Lưu thay đổi"}
           </Button>
         </div>
       </Modal>

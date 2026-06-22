@@ -176,7 +176,11 @@ export function DeviceDetailClient({ detail }: { detail: DeviceDetailData }) {
             <EmptyState
               title="Chưa gắn chứng thư số"
               description="Có thể thêm chứng thư mới tại màn hình Chứng thư số."
-              action={<TextLinkButton href="/dashboard/chung-thu-so">Thêm chứng thư</TextLinkButton>}
+              action={
+                <TextLinkButton href={`/dashboard/chung-thu-so?them=1&thietBi=${device.id}`}>
+                  Thêm chứng thư
+                </TextLinkButton>
+              }
             />
           )}
         </Panel>
