@@ -14,7 +14,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 import {
   deleteDeviceAction,
@@ -198,6 +198,17 @@ export function DeviceListClient({
     [rows, safePage, pageSize]
   );
   const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
+
+  useEffect(() => {
+    setFilterState({
+      q: filters.q ?? "",
+      loai: filters.loai ?? "",
+      phongBan: filters.phongBan ?? "",
+      tinhTrang: filters.tinhTrang ?? "",
+      nguoiDung: filters.nguoiDung ?? "",
+    });
+    setPage(1);
+  }, [filters.q, filters.loai, filters.phongBan, filters.tinhTrang, filters.nguoiDung]);
 
   function applyFilters(next: DeviceFilters) {
     const params = new URLSearchParams();

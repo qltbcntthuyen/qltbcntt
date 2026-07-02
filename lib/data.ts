@@ -171,7 +171,9 @@ export async function getDepartments(): Promise<DepartmentItem[]> {
     supabase.from("phong_ban").select("*").order("ten_phong_ban"),
     supabase.from("nguoi_dung").select("id, phong_ban_id").order("id"),
     supabase.from("thiet_bi").select("id, phong_ban_id").order("id"),
-    supabase.from("v_bao_cao_chung_thu_so").select("phong_ban_id"),
+    supabase
+      .from("v_bao_cao_chung_thu_so")
+      .select("phong_ban_id, la_hien_hanh, thoi_diem_thu_hoi"),
   ]);
 
   const staffByDepartment = new Map<number, number>();
@@ -189,6 +191,8 @@ export async function getDepartments(): Promise<DepartmentItem[]> {
   }
 
   for (const row of certificatesResult.data ?? []) {
+    // Chỉ đếm CTS hiện hành, chưa thu hồi (bỏ qua serial lịch sử đã gia hạn/thay thế)
+    if (!row.la_hien_hanh || row.thoi_diem_thu_hoi) continue;
     if (row.phong_ban_id == null) continue;
     certificatesByDepartment.set(
       row.phong_ban_id,
@@ -252,7 +256,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   }).length;
   const unassignedDevices = lookups.devices.filter((device) => !device.nguoi_su_dung_id).length;
 
-  const certificateRows = certificates.data ?? [];
+  // Chỉ xét CTS hiện hành, chưa thu hồi cho các chỉ số cần hành động
+  const certificateRows = (certificates.data ?? []).filter(
+    (row) => row.la_hien_hanh && !row.thoi_diem_thu_hoi
+  );
   const maintenanceRows = maintenance.data ?? [];
   const renewalStatuses = ["het_han"];
   const actionStatuses = ["sap_het_han", "het_han", "can_thu_hoi"];
@@ -518,6 +525,8 @@ export async function getPersonnel(filters: {
   }
 
   for (const certificate of certificateRows) {
+    // Chỉ đếm CTS hiện hành, chưa thu hồi cho mỗi nhân sự
+    if (!certificate.la_hien_hanh || certificate.thoi_diem_thu_hoi) continue;
     if (certificate.nguoi_su_dung_id == null) continue;
     const current = certificatesByStaff.get(certificate.nguoi_su_dung_id) ?? [];
     current.push(certificate);

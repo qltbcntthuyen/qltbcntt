@@ -90,11 +90,16 @@ export function OperationsClient({ data }: { data: OperationsData }) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteHandover, setDeleteHandover] = useState<HandoverItem | null>(null);
   const [deleteMaintenance, setDeleteMaintenance] = useState<MaintenanceItem | null>(null);
-  const [filter, setFilter] = useState({ q: "", status: "all" });
+  const [filter, setFilterRaw] = useState({ q: "", status: "all" });
   const [message, setMessage] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(30);
   const [isPending, startTransition] = useTransition();
+
+  function setFilter(updater: React.SetStateAction<{ q: string; status: string }>) {
+    setPage(1);
+    setFilterRaw(updater);
+  }
 
   const filteredHandovers = data.handovers.filter((row) => {
     const q = normalizeText(filter.q);

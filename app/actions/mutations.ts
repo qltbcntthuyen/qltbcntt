@@ -75,11 +75,28 @@ function failure(error: unknown): ActionResult {
     return { ok: false, message: error.message };
   }
   if (typeof error === "object" && error !== null && "message" in error) {
+    const code = "code" in error ? String((error as { code: unknown }).code ?? "") : "";
     const message = String((error as { message: unknown }).message);
-    if (/character varying\(20\)/i.test(message)) {
+    if (code === "23503") {
       return {
         ok: false,
-        message: "Mã danh mục tối đa 20 ký tự. Hãy để trống nếu không cần mã.",
+        message:
+          "Không thể thực hiện: dữ liệu đang được liên kết với hồ sơ khác (thiết bị, chứng thư, lịch sử...). Hãy gỡ liên kết trước.",
+      };
+    }
+    if (code === "23505") {
+      return {
+        ok: false,
+        message: "Dữ liệu bị trùng: mã hoặc serial đã tồn tại trong hệ thống.",
+      };
+    }
+    const varcharMatch = message.match(/character varying\((\d+)\)/i);
+    if (code === "22001" || varcharMatch) {
+      return {
+        ok: false,
+        message: varcharMatch
+          ? `Giá trị nhập vượt quá ${varcharMatch[1]} ký tự cho phép.`
+          : "Giá trị nhập quá dài so với giới hạn cho phép.",
       };
     }
     return { ok: false, message };
@@ -96,6 +113,22 @@ function catalogCode(input: EntityInput, key: string, label: string) {
   return value;
 }
 
+function limitedText(input: EntityInput, key: string, label: string, max: number) {
+  const value = nullableText(input, key);
+  if (value && value.length > max) {
+    throw new Error(`${label} tối đa ${max} ký tự.`);
+  }
+  return value;
+}
+
+function requiredLimitedText(input: EntityInput, key: string, label: string, max: number) {
+  const value = requiredText(input, key, label);
+  if (value.length > max) {
+    throw new Error(`${label.charAt(0).toUpperCase()}${label.slice(1)} tối đa ${max} ký tự.`);
+  }
+  return value;
+}
+
 export async function savePersonAction(input: EntityInput): Promise<ActionResult> {
   const denied = await ensureActionAllowed();
   if (denied) return denied;
@@ -104,6 +137,16 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
     const supabase = await createClient();
     const id = idValue(input);
     let maHoSo = toOptionalString(String(input.ten_dang_nhap ?? ""));
+    if (!maHoSo && id) {
+      // Giữ nguyên mã hồ sơ hiện có khi cập nhật
+      const { data: existing, error: existingError } = await supabase
+        .from("nguoi_dung")
+        .select("ten_dang_nhap")
+        .eq("id", id)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      maHoSo = existing?.ten_dang_nhap ?? null;
+    }
     if (!id && !maHoSo) {
       const { data: generated, error: genError } = await supabase.rpc("gen_ma_nhan_su");
       if (genError) throw genError;
@@ -112,13 +155,16 @@ export async function savePersonAction(input: EntityInput): Promise<ActionResult
     if (!maHoSo) {
       throw new Error("Không thể sinh mã hồ sơ. Vui lòng thử lại.");
     }
+    if (maHoSo.length > 50) {
+      throw new Error("Mã hồ sơ tối đa 50 ký tự.");
+    }
     const payload = {
-      ho_ten: requiredText(input, "ho_ten", "họ tên"),
+      ho_ten: requiredLimitedText(input, "ho_ten", "họ tên", 100),
       ten_dang_nhap: maHoSo,
-      email: nullableText(input, "email"),
-      so_dien_thoai: nullableText(input, "so_dien_thoai"),
+      email: limitedText(input, "email", "Email", 100),
+      so_dien_thoai: limitedText(input, "so_dien_thoai", "Số điện thoại", 20),
       phong_ban_id: nullableNumber(input, "phong_ban_id"),
-      vai_tro: requiredText(input, "vai_tro", "vai trò"),
+      vai_tro: requiredLimitedText(input, "vai_tro", "vai trò", 50),
       trang_thai: boolValue(input, "trang_thai", true),
       auth_user_id: nullableText(input, "auth_user_id"),
     };
@@ -156,6 +202,16 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
     const supabase = await createClient();
     const id = idValue(input);
     let maThietBi = toOptionalString(String(input.ma_thiet_bi ?? ""));
+    if (!maThietBi && id) {
+      // Giữ nguyên mã thiết bị hiện có khi cập nhật
+      const { data: existing, error: existingError } = await supabase
+        .from("thiet_bi")
+        .select("ma_thiet_bi")
+        .eq("id", id)
+        .maybeSingle();
+      if (existingError) throw existingError;
+      maThietBi = existing?.ma_thiet_bi ?? null;
+    }
     if (!id && !maThietBi) {
       const { data: generated, error: genError } = await supabase.rpc("gen_ma_thiet_bi");
       if (genError) throw genError;
@@ -164,12 +220,15 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
     if (!maThietBi) {
       throw new Error("Không thể sinh mã thiết bị. Vui lòng thử lại.");
     }
+    if (maThietBi.length > 50) {
+      throw new Error("Mã thiết bị tối đa 50 ký tự.");
+    }
     const payload = {
       ma_thiet_bi: maThietBi,
-      ten_thiet_bi: requiredText(input, "ten_thiet_bi", "tên thiết bị"),
+      ten_thiet_bi: requiredLimitedText(input, "ten_thiet_bi", "tên thiết bị", 150),
       loai_thiet_bi_id: requiredNumber(input, "loai_thiet_bi_id", "loại thiết bị"),
       hang_model_id: nullableNumber(input, "hang_model_id"),
-      serial: nullableText(input, "serial"),
+      serial: limitedText(input, "serial", "Serial", 100),
       nam_trang_bi: nullableNumber(input, "nam_trang_bi"),
       ngay_tiep_nhan: nullableText(input, "ngay_tiep_nhan"),
       nguon_goc_id: nullableNumber(input, "nguon_goc_id"),
@@ -180,7 +239,7 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
       thiet_bi_mat: boolValue(input, "thiet_bi_mat", false),
       dap_ung_cds: boolValue(input, "dap_ung_cds", false),
       nhom_cds: nullableText(input, "nhom_cds"),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: limitedText(input, "ghi_chu", "Ghi chú", 255),
     };
 
     const result = id
@@ -203,14 +262,14 @@ export async function saveDeviceAction(input: EntityInput): Promise<ActionResult
     if (savedId && hasComputerConfig) {
       const configPayload = {
         thiet_bi_id: savedId,
-        mainboard: nullableText(input, "mainboard"),
-        cpu: nullableText(input, "cpu"),
-        ram: nullableText(input, "ram"),
-        o_cung: nullableText(input, "o_cung"),
-        man_hinh: nullableText(input, "man_hinh"),
+        mainboard: limitedText(input, "mainboard", "Mainboard", 100),
+        cpu: limitedText(input, "cpu", "CPU", 100),
+        ram: limitedText(input, "ram", "RAM", 50),
+        o_cung: limitedText(input, "o_cung", "Ổ cứng", 100),
+        man_hinh: limitedText(input, "man_hinh", "Màn hình", 100),
         he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
         phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
-        ghi_chu: nullableText(input, "ghi_chu_ky_thuat"),
+        ghi_chu: limitedText(input, "ghi_chu_ky_thuat", "Ghi chú kỹ thuật", 255),
       };
       const { error: configError } = await supabase
         .from("cau_hinh_may_tinh")
@@ -248,14 +307,14 @@ export async function saveComputerConfigAction(input: EntityInput): Promise<Acti
     const supabase = await createClient();
     const payload = {
       thiet_bi_id: requiredNumber(input, "thiet_bi_id", "thiết bị"),
-      mainboard: nullableText(input, "mainboard"),
-      cpu: nullableText(input, "cpu"),
-      ram: nullableText(input, "ram"),
-      o_cung: nullableText(input, "o_cung"),
-      man_hinh: nullableText(input, "man_hinh"),
+      mainboard: limitedText(input, "mainboard", "Mainboard", 100),
+      cpu: limitedText(input, "cpu", "CPU", 100),
+      ram: limitedText(input, "ram", "RAM", 50),
+      o_cung: limitedText(input, "o_cung", "Ổ cứng", 100),
+      man_hinh: limitedText(input, "man_hinh", "Màn hình", 100),
       he_dieu_hanh_id: nullableNumber(input, "he_dieu_hanh_id"),
       phan_mem_diet_virus_id: nullableNumber(input, "phan_mem_diet_virus_id"),
-      ghi_chu: nullableText(input, "ghi_chu"),
+      ghi_chu: limitedText(input, "ghi_chu", "Ghi chú", 255),
     };
 
     const { error } = await supabase
@@ -321,6 +380,9 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         .maybeSingle();
       if (previousError) throw previousError;
       if (!previous) throw new Error("Không tìm thấy chứng thư cần cập nhật.");
+      if (previous.thoi_diem_thu_hoi) {
+        throw new Error("CTS đã thu hồi không thể đổi thông tin.");
+      }
 
       const { error } = await supabase
         .from("thiet_bi_chung_thu_so")
@@ -390,41 +452,61 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         da_gia_han: false,
         la_hien_hanh: true,
       };
-      const { data: inserted, error: insertError } = await supabase
-        .from("thiet_bi_chung_thu_so")
-        .insert(insertPayload)
-        .select("*")
-        .single();
-      if (insertError) throw insertError;
+      let insertedId: number | null = null;
+      try {
+        const { data: inserted, error: insertError } = await supabase
+          .from("thiet_bi_chung_thu_so")
+          .insert(insertPayload)
+          .select("*")
+          .single();
+        if (insertError) throw insertError;
+        insertedId = inserted.id;
 
-      await supabase
-        .from("thiet_bi_chung_thu_so")
-        .update({ chung_thu_thay_the_id: inserted.id })
-        .eq("id", previous.id);
+        const { error: linkError } = await supabase
+          .from("thiet_bi_chung_thu_so")
+          .update({ chung_thu_thay_the_id: inserted.id })
+          .eq("id", previous.id);
+        if (linkError) throw linkError;
 
-      const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
-        thiet_bi_chung_thu_so_id: inserted.id,
-        thiet_bi_id: previous.thiet_bi_id,
-        loai_su_kien: "gia_han",
-        nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
-        nguoi_su_dung_id_sau: insertPayload.nguoi_su_dung_id,
-        so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
-        so_hieu_chung_thu_so_sau: inserted.so_hieu_chung_thu_so,
-        email_truoc: previous.email,
-        email_sau: inserted.email,
-        ten_chung_thu_so_truoc: previous.ten_chung_thu_so,
-        ten_chung_thu_so_sau: inserted.ten_chung_thu_so,
-        to_chuc_truoc: previous.to_chuc,
-        to_chuc_sau: inserted.to_chuc,
-        thong_tin_chung_truoc: previous.thong_tin_chung,
-        thong_tin_chung_sau: inserted.thong_tin_chung,
-        ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
-        ngay_hieu_luc_sau: inserted.ngay_hieu_luc,
-        ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
-        ngay_het_hieu_luc_sau: inserted.ngay_het_hieu_luc,
-        ghi_chu: null,
-      });
-      if (historyError) throw historyError;
+        const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+          thiet_bi_chung_thu_so_id: inserted.id,
+          thiet_bi_id: previous.thiet_bi_id,
+          loai_su_kien: "gia_han",
+          nguoi_su_dung_id_truoc: previous.nguoi_su_dung_id,
+          nguoi_su_dung_id_sau: insertPayload.nguoi_su_dung_id,
+          so_hieu_chung_thu_so_truoc: previous.so_hieu_chung_thu_so,
+          so_hieu_chung_thu_so_sau: inserted.so_hieu_chung_thu_so,
+          email_truoc: previous.email,
+          email_sau: inserted.email,
+          ten_chung_thu_so_truoc: previous.ten_chung_thu_so,
+          ten_chung_thu_so_sau: inserted.ten_chung_thu_so,
+          to_chuc_truoc: previous.to_chuc,
+          to_chuc_sau: inserted.to_chuc,
+          thong_tin_chung_truoc: previous.thong_tin_chung,
+          thong_tin_chung_sau: inserted.thong_tin_chung,
+          ngay_hieu_luc_truoc: previous.ngay_hieu_luc,
+          ngay_hieu_luc_sau: inserted.ngay_hieu_luc,
+          ngay_het_hieu_luc_truoc: previous.ngay_het_hieu_luc,
+          ngay_het_hieu_luc_sau: inserted.ngay_het_hieu_luc,
+          ghi_chu: null,
+        });
+        if (historyError) throw historyError;
+      } catch (stepError) {
+        // Bù trừ: xóa CTS mới (nếu đã tạo) và khôi phục CTS gốc về trạng thái trước gia hạn
+        if (insertedId != null) {
+          await supabase.from("thiet_bi_chung_thu_so").delete().eq("id", insertedId);
+        }
+        await supabase
+          .from("thiet_bi_chung_thu_so")
+          .update({
+            da_gia_han: previous.da_gia_han,
+            la_hien_hanh: previous.la_hien_hanh,
+            thoi_diem_gia_han_gan_nhat: previous.thoi_diem_gia_han_gan_nhat,
+            chung_thu_thay_the_id: previous.chung_thu_thay_the_id,
+          })
+          .eq("id", previous.id);
+        throw stepError;
+      }
     } else {
       const { data: previousCurrent } = await supabase
         .from("thiet_bi_chung_thu_so")
@@ -442,47 +524,67 @@ export async function saveCertificateAction(input: EntityInput): Promise<ActionR
         if (retireError) throw retireError;
       }
 
-      const { data: inserted, error } = await supabase
-        .from("thiet_bi_chung_thu_so")
-        .insert({
-          ...payload,
-          da_gia_han: false,
-          la_hien_hanh: true,
-        })
-        .select("*")
-        .single();
-      if (error) throw error;
-
-      if (previousCurrent) {
-        await supabase
+      let insertedId: number | null = null;
+      try {
+        const { data: inserted, error } = await supabase
           .from("thiet_bi_chung_thu_so")
-          .update({ chung_thu_thay_the_id: inserted.id })
-          .eq("id", previousCurrent.id);
-      }
+          .insert({
+            ...payload,
+            da_gia_han: false,
+            la_hien_hanh: true,
+          })
+          .select("*")
+          .single();
+        if (error) throw error;
+        insertedId = inserted.id;
 
-      const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
-        thiet_bi_chung_thu_so_id: inserted.id,
-        thiet_bi_id: payload.thiet_bi_id,
-        loai_su_kien: "cap_moi",
-        nguoi_su_dung_id_truoc: previousCurrent?.nguoi_su_dung_id ?? null,
-        nguoi_su_dung_id_sau: payload.nguoi_su_dung_id,
-        so_hieu_chung_thu_so_truoc: previousCurrent?.so_hieu_chung_thu_so ?? null,
-        so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
-        email_truoc: previousCurrent?.email ?? null,
-        email_sau: payload.email,
-        ten_chung_thu_so_truoc: previousCurrent?.ten_chung_thu_so ?? null,
-        ten_chung_thu_so_sau: payload.ten_chung_thu_so,
-        to_chuc_truoc: previousCurrent?.to_chuc ?? null,
-        to_chuc_sau: payload.to_chuc,
-        thong_tin_chung_truoc: previousCurrent?.thong_tin_chung ?? null,
-        thong_tin_chung_sau: payload.thong_tin_chung,
-        ngay_hieu_luc_truoc: previousCurrent?.ngay_hieu_luc ?? null,
-        ngay_hieu_luc_sau: payload.ngay_hieu_luc,
-        ngay_het_hieu_luc_truoc: previousCurrent?.ngay_het_hieu_luc ?? null,
-        ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
-        ghi_chu: null,
-      });
-      if (historyError) throw historyError;
+        if (previousCurrent) {
+          const { error: linkError } = await supabase
+            .from("thiet_bi_chung_thu_so")
+            .update({ chung_thu_thay_the_id: inserted.id })
+            .eq("id", previousCurrent.id);
+          if (linkError) throw linkError;
+        }
+
+        const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+          thiet_bi_chung_thu_so_id: inserted.id,
+          thiet_bi_id: payload.thiet_bi_id,
+          loai_su_kien: "cap_moi",
+          nguoi_su_dung_id_truoc: previousCurrent?.nguoi_su_dung_id ?? null,
+          nguoi_su_dung_id_sau: payload.nguoi_su_dung_id,
+          so_hieu_chung_thu_so_truoc: previousCurrent?.so_hieu_chung_thu_so ?? null,
+          so_hieu_chung_thu_so_sau: payload.so_hieu_chung_thu_so,
+          email_truoc: previousCurrent?.email ?? null,
+          email_sau: payload.email,
+          ten_chung_thu_so_truoc: previousCurrent?.ten_chung_thu_so ?? null,
+          ten_chung_thu_so_sau: payload.ten_chung_thu_so,
+          to_chuc_truoc: previousCurrent?.to_chuc ?? null,
+          to_chuc_sau: payload.to_chuc,
+          thong_tin_chung_truoc: previousCurrent?.thong_tin_chung ?? null,
+          thong_tin_chung_sau: payload.thong_tin_chung,
+          ngay_hieu_luc_truoc: previousCurrent?.ngay_hieu_luc ?? null,
+          ngay_hieu_luc_sau: payload.ngay_hieu_luc,
+          ngay_het_hieu_luc_truoc: previousCurrent?.ngay_het_hieu_luc ?? null,
+          ngay_het_hieu_luc_sau: payload.ngay_het_hieu_luc,
+          ghi_chu: null,
+        });
+        if (historyError) throw historyError;
+      } catch (stepError) {
+        // Bù trừ: xóa CTS mới (nếu đã tạo) và khôi phục CTS hiện hành trước đó
+        if (insertedId != null) {
+          await supabase.from("thiet_bi_chung_thu_so").delete().eq("id", insertedId);
+        }
+        if (previousCurrent) {
+          await supabase
+            .from("thiet_bi_chung_thu_so")
+            .update({
+              la_hien_hanh: true,
+              chung_thu_thay_the_id: previousCurrent.chung_thu_thay_the_id,
+            })
+            .eq("id", previousCurrent.id);
+        }
+        throw stepError;
+      }
     }
 
     revalidatePath("/dashboard/chung-thu-so");
@@ -552,6 +654,20 @@ export async function importCertificatesAction(rows: EntityInput[]): Promise<Act
       throw new Error("Không có dòng nào đủ điều kiện import. Cần khớp mã thiết bị và nhân sự trước.");
     }
 
+    const serialCounts = new Map<string, number>();
+    for (const item of readyRows) {
+      const key = normalizeText(item.serial);
+      serialCounts.set(key, (serialCounts.get(key) ?? 0) + 1);
+    }
+    const duplicatedSerials = [...serialCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([serial]) => serial);
+    if (duplicatedSerials.length) {
+      throw new Error(
+        `Serial bị trùng lặp trong file import: ${duplicatedSerials.slice(0, 5).join(", ")}. Vui lòng sửa file trước khi import.`
+      );
+    }
+
     const grouped = new Map<number, typeof readyRows>();
     for (const item of readyRows) {
       const deviceId = item.device!.id;
@@ -562,83 +678,109 @@ export async function importCertificatesAction(rows: EntityInput[]): Promise<Act
 
     let imported = 0;
     let skippedExisting = 0;
+    const groupErrors: string[] = [];
 
     for (const [deviceId, group] of grouped) {
       const sorted = [...group].sort((a, b) =>
         String(a.row.ngay_hieu_luc ?? "").localeCompare(String(b.row.ngay_hieu_luc ?? ""))
       );
-      await supabase
-        .from("thiet_bi_chung_thu_so")
-        .update({ la_hien_hanh: false })
-        .eq("thiet_bi_id", deviceId)
-        .eq("la_hien_hanh", true)
-        .is("thoi_diem_thu_hoi", null);
+      const originalCurrentIds = (existingResult.data ?? [])
+        .filter(
+          (item) =>
+            item.thiet_bi_id === deviceId && item.la_hien_hanh && !item.thoi_diem_thu_hoi
+        )
+        .map((item) => item.id);
+      let newCurrentEstablished = false;
 
-      let previousId: number | null = null;
-      for (const [index, item] of sorted.entries()) {
-        const existing = existingSerials.get(normalizeText(item.serial));
-        const isLast = index === sorted.length - 1;
-        const certPayload: TablesInsert<"thiet_bi_chung_thu_so"> = {
-          thiet_bi_id: deviceId,
-          nguoi_su_dung_id: item.staff!.id,
-          so_hieu_chung_thu_so: item.serial,
-          email: nullableText(item.row, "email"),
-          ten_chung_thu_so: nullableText(item.row, "ten_chung_thu_so"),
-          loai_chung_thu_so: nullableText(item.row, "loai_chung_thu_so"),
-          to_chuc: nullableText(item.row, "to_chuc"),
-          thong_tin_chung: nullableText(item.row, "thong_tin_chung"),
-          id_chung_thu_so_nguon: nullableText(item.row, "id_chung_thu_so_nguon"),
-          ngay_hieu_luc: requiredText(item.row, "ngay_hieu_luc", "ngày hiệu lực"),
-          ngay_het_hieu_luc: requiredText(item.row, "ngay_het_hieu_luc", "ngày hết hạn"),
-          da_gia_han: !isLast,
-          la_hien_hanh: isLast,
-          chung_thu_goc_id: previousId,
-          ghi_chu: null,
-        };
+      try {
+        const { error: bulkRetireError } = await supabase
+          .from("thiet_bi_chung_thu_so")
+          .update({ la_hien_hanh: false })
+          .eq("thiet_bi_id", deviceId)
+          .eq("la_hien_hanh", true)
+          .is("thoi_diem_thu_hoi", null);
+        if (bulkRetireError) throw bulkRetireError;
 
-        const result = existing
-          ? await supabase
+        let previousId: number | null = null;
+        for (const [index, item] of sorted.entries()) {
+          const existing = existingSerials.get(normalizeText(item.serial));
+          const isLast = index === sorted.length - 1;
+          const certPayload: TablesInsert<"thiet_bi_chung_thu_so"> = {
+            thiet_bi_id: deviceId,
+            nguoi_su_dung_id: item.staff!.id,
+            so_hieu_chung_thu_so: item.serial,
+            email: nullableText(item.row, "email"),
+            ten_chung_thu_so: nullableText(item.row, "ten_chung_thu_so"),
+            loai_chung_thu_so: nullableText(item.row, "loai_chung_thu_so"),
+            to_chuc: nullableText(item.row, "to_chuc"),
+            thong_tin_chung: nullableText(item.row, "thong_tin_chung"),
+            id_chung_thu_so_nguon: nullableText(item.row, "id_chung_thu_so_nguon"),
+            ngay_hieu_luc: requiredText(item.row, "ngay_hieu_luc", "ngày hiệu lực"),
+            ngay_het_hieu_luc: requiredText(item.row, "ngay_het_hieu_luc", "ngày hết hạn"),
+            da_gia_han: !isLast,
+            la_hien_hanh: isLast,
+            chung_thu_goc_id: previousId,
+            ghi_chu: null,
+          };
+
+          const result = existing
+            ? await supabase
+                .from("thiet_bi_chung_thu_so")
+                .update(certPayload)
+                .eq("id", existing.id)
+                .select("*")
+                .single()
+            : await supabase
+                .from("thiet_bi_chung_thu_so")
+                .insert(certPayload)
+                .select("*")
+                .single();
+          if (result.error) throw result.error;
+          if (isLast) newCurrentEstablished = true;
+
+          if (previousId) {
+            const { error: linkError } = await supabase
               .from("thiet_bi_chung_thu_so")
-              .update(certPayload)
-              .eq("id", existing.id)
-              .select("*")
-              .single()
-          : await supabase
-              .from("thiet_bi_chung_thu_so")
-              .insert(certPayload)
-              .select("*")
-              .single();
-        if (result.error) throw result.error;
+              .update({ chung_thu_thay_the_id: result.data.id })
+              .eq("id", previousId);
+            if (linkError) throw linkError;
+          }
 
-        if (previousId) {
+          if (!existing) {
+            const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
+              thiet_bi_chung_thu_so_id: result.data.id,
+              thiet_bi_id: deviceId,
+              loai_su_kien: previousId ? "gia_han" : "cap_moi",
+              nguoi_su_dung_id_sau: item.staff!.id,
+              so_hieu_chung_thu_so_sau: item.serial,
+              email_sau: certPayload.email,
+              ten_chung_thu_so_sau: certPayload.ten_chung_thu_so,
+              to_chuc_sau: certPayload.to_chuc,
+              thong_tin_chung_sau: certPayload.thong_tin_chung,
+              ngay_hieu_luc_sau: certPayload.ngay_hieu_luc,
+              ngay_het_hieu_luc_sau: certPayload.ngay_het_hieu_luc,
+              ghi_chu: null,
+            });
+            if (historyError) throw historyError;
+            imported += 1;
+          } else {
+            skippedExisting += 1;
+          }
+
+          previousId = result.data.id;
+        }
+      } catch (groupError) {
+        // Bù trừ: nếu chưa thiết lập được CTS hiện hành mới thì khôi phục CTS hiện hành cũ
+        if (!newCurrentEstablished && originalCurrentIds.length) {
           await supabase
             .from("thiet_bi_chung_thu_so")
-            .update({ chung_thu_thay_the_id: result.data.id })
-            .eq("id", previousId);
+            .update({ la_hien_hanh: true })
+            .in("id", originalCurrentIds);
         }
-
-        if (!existing) {
-          const { error: historyError } = await supabase.from("lich_su_chung_thu_so").insert({
-            thiet_bi_chung_thu_so_id: result.data.id,
-            thiet_bi_id: deviceId,
-            loai_su_kien: previousId ? "gia_han" : "cap_moi",
-            nguoi_su_dung_id_sau: item.staff!.id,
-            so_hieu_chung_thu_so_sau: item.serial,
-            email_sau: certPayload.email,
-            ten_chung_thu_so_sau: certPayload.ten_chung_thu_so,
-            to_chuc_sau: certPayload.to_chuc,
-            thong_tin_chung_sau: certPayload.thong_tin_chung,
-            ngay_hieu_luc_sau: certPayload.ngay_hieu_luc,
-            ngay_het_hieu_luc_sau: certPayload.ngay_het_hieu_luc,
-            ghi_chu: null,
-          });
-          if (historyError) throw historyError;
-          imported += 1;
-        } else {
-          skippedExisting += 1;
-        }
-
-        previousId = result.data.id;
+        const deviceCode = group[0]?.device?.ma_thiet_bi ?? `#${deviceId}`;
+        groupErrors.push(
+          `Thiết bị ${deviceCode}: ${groupError instanceof Error ? groupError.message : "lỗi không xác định"}`
+        );
       }
     }
 
@@ -646,9 +788,13 @@ export async function importCertificatesAction(rows: EntityInput[]): Promise<Act
     revalidatePath("/dashboard/chung-thu-so");
     revalidatePath("/dashboard/bao-cao");
     revalidatePath("/dashboard");
-    return success(
-      `Đã import ${imported} CTS mới. ${skippedExisting} serial đã có được cập nhật. ${skipped} dòng chưa đủ điều kiện được bỏ qua.`
-    );
+    const errorDetail = groupErrors.length
+      ? ` Lỗi: ${groupErrors.slice(0, 5).join(" | ")}`
+      : "";
+    return {
+      ok: groupErrors.length === 0,
+      message: `Đã import ${imported} CTS mới. ${skippedExisting} serial đã có được cập nhật. ${skipped} dòng chưa đủ điều kiện được bỏ qua.${errorDetail}`,
+    };
   } catch (error) {
     return failure(error);
   }
@@ -671,6 +817,9 @@ export async function revokeCertificateAction(input: number | EntityInput): Prom
       .maybeSingle();
     if (previousError) throw previousError;
     if (!previous) throw new Error("Không tìm thấy chứng thư cần thu hồi.");
+    if (previous.thoi_diem_thu_hoi) {
+      throw new Error("CTS này đã được thu hồi trước đó.");
+    }
 
     let revokeAt = new Date().toISOString();
     if (customRevokeAt) {
@@ -736,23 +885,39 @@ export async function saveHandoverAction(input: EntityInput): Promise<ActionResu
       phong_ban_nhan_id: nullableNumber(input, "phong_ban_nhan_id"),
       ngay_ban_giao: requiredText(input, "ngay_ban_giao", "ngày bàn giao"),
       ngay_thu_hoi: null,
-      hinh_thuc: nullableText(input, "hinh_thuc"),
-      noi_dung: nullableText(input, "noi_dung"),
+      hinh_thuc: limitedText(input, "hinh_thuc", "Hình thức", 50),
+      noi_dung: limitedText(input, "noi_dung", "Nội dung", 255),
       ghi_chu: null,
     };
 
-    const result = id
-      ? await supabase.from("lich_su_ban_giao").update(payload).eq("id", id)
-      : await supabase.from("lich_su_ban_giao").insert(payload);
-    if (result.error) throw result.error;
+    let insertedHandoverId: number | null = null;
+    if (id) {
+      const result = await supabase.from("lich_su_ban_giao").update(payload).eq("id", id);
+      if (result.error) throw result.error;
+    } else {
+      const result = await supabase
+        .from("lich_su_ban_giao")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (result.error) throw result.error;
+      insertedHandoverId = result.data.id;
+    }
 
-    await supabase
+    const { error: deviceError } = await supabase
       .from("thiet_bi")
       .update({
         nguoi_su_dung_id: payload.nguoi_nhan_id,
         phong_ban_id: payload.phong_ban_nhan_id,
       })
       .eq("id", payload.thiet_bi_id);
+    if (deviceError) {
+      // Bù trừ: xóa bản ghi bàn giao vừa tạo để tránh lệch giữa lịch sử và thiết bị
+      if (insertedHandoverId != null) {
+        await supabase.from("lich_su_ban_giao").delete().eq("id", insertedHandoverId);
+      }
+      throw deviceError;
+    }
 
     revalidatePath("/dashboard/ban-giao");
     revalidatePath("/dashboard/thiet-bi");
@@ -785,11 +950,11 @@ export async function saveMaintenanceAction(input: EntityInput): Promise<ActionR
       thiet_bi_id: requiredNumber(input, "thiet_bi_id", "thiết bị"),
       ngay_ghi_nhan: requiredText(input, "ngay_ghi_nhan", "ngày ghi nhận"),
       ngay_sua_chua: nullableText(input, "ngay_sua_chua"),
-      loai_xu_ly: nullableText(input, "loai_xu_ly"),
-      mo_ta_loi: nullableText(input, "mo_ta_loi"),
-      ket_qua_xu_ly: nullableText(input, "ket_qua_xu_ly"),
+      loai_xu_ly: limitedText(input, "loai_xu_ly", "Loại xử lý", 50),
+      mo_ta_loi: limitedText(input, "mo_ta_loi", "Mô tả lỗi", 255),
+      ket_qua_xu_ly: limitedText(input, "ket_qua_xu_ly", "Kết quả xử lý", 255),
       chi_phi: nullableNumber(input, "chi_phi"),
-      don_vi_sua_chua: nullableText(input, "don_vi_sua_chua"),
+      don_vi_sua_chua: limitedText(input, "don_vi_sua_chua", "Đơn vị sửa chữa", 150),
       ghi_chu: null,
     };
 
@@ -1031,7 +1196,17 @@ export async function saveCatalogAction(
 
     switch (kind) {
       case "phong_ban": {
-        let maPhongBan = toOptionalString(String(input.ma ?? ""));
+        let maPhongBan = catalogCode(input, "ma", "Mã phòng ban");
+        if (!maPhongBan && id) {
+          // Giữ nguyên mã phòng ban hiện có khi cập nhật
+          const { data: existing, error: existingError } = await supabase
+            .from("phong_ban")
+            .select("ma_phong_ban")
+            .eq("id", id)
+            .maybeSingle();
+          if (existingError) throw existingError;
+          maPhongBan = existing?.ma_phong_ban ?? null;
+        }
         if (!maPhongBan) {
           const { data: generated, error: genError } = await supabase.rpc("gen_ma_phong_ban");
           if (genError) throw genError;
@@ -1042,7 +1217,7 @@ export async function saveCatalogAction(
         }
         const payload = {
           ma_phong_ban: maPhongBan,
-          ten_phong_ban: requiredText(input, "ten", "tên phòng ban"),
+          ten_phong_ban: requiredLimitedText(input, "ten", "tên phòng ban", 150),
           ghi_chu: null,
         };
         const result = id
@@ -1054,7 +1229,7 @@ export async function saveCatalogAction(
       case "loai_thiet_bi": {
         const payload = {
           ma_loai: catalogCode(input, "ma", "Mã loại"),
-          ten_loai: requiredText(input, "ten", "tên loại thiết bị"),
+          ten_loai: requiredLimitedText(input, "ten", "tên loại thiết bị", 100),
           ghi_chu: null,
         };
         const result = id
@@ -1065,8 +1240,8 @@ export async function saveCatalogAction(
       }
       case "hang_model": {
         const payload = {
-          ten_hang: requiredText(input, "ten", "tên hãng"),
-          ten_model: nullableText(input, "phu"),
+          ten_hang: requiredLimitedText(input, "ten", "tên hãng", 100),
+          ten_model: limitedText(input, "phu", "Model", 100),
           ghi_chu: null,
         };
         const result = id
@@ -1077,8 +1252,8 @@ export async function saveCatalogAction(
       }
       case "he_dieu_hanh": {
         const payload = {
-          ten_he_dieu_hanh: requiredText(input, "ten", "tên hệ điều hành"),
-          phien_ban: nullableText(input, "phu"),
+          ten_he_dieu_hanh: requiredLimitedText(input, "ten", "tên hệ điều hành", 100),
+          phien_ban: limitedText(input, "phu", "Phiên bản", 50),
         };
         const result = id
           ? await supabase.from("he_dieu_hanh").update(payload).eq("id", id)
@@ -1088,8 +1263,8 @@ export async function saveCatalogAction(
       }
       case "phan_mem_diet_virus": {
         const payload = {
-          ten_phan_mem: requiredText(input, "ten", "tên phần mềm"),
-          phien_ban: nullableText(input, "phu"),
+          ten_phan_mem: requiredLimitedText(input, "ten", "tên phần mềm", 100),
+          phien_ban: limitedText(input, "phu", "Phiên bản", 50),
         };
         const result = id
           ? await supabase.from("phan_mem_diet_virus").update(payload).eq("id", id)
@@ -1100,7 +1275,7 @@ export async function saveCatalogAction(
       case "tinh_trang_thiet_bi": {
         const payload = {
           ma_tinh_trang: catalogCode(input, "ma", "Mã tình trạng"),
-          ten_tinh_trang: requiredText(input, "ten", "tên tình trạng"),
+          ten_tinh_trang: requiredLimitedText(input, "ten", "tên tình trạng", 100),
           ghi_chu: null,
         };
         const result = id
@@ -1112,7 +1287,7 @@ export async function saveCatalogAction(
       case "nguon_goc_tai_san": {
         const payload = {
           ma_nguon_goc: catalogCode(input, "ma", "Mã nguồn gốc"),
-          ten_nguon_goc: requiredText(input, "ten", "tên nguồn gốc"),
+          ten_nguon_goc: requiredLimitedText(input, "ten", "tên nguồn gốc", 100),
           ghi_chu: null,
         };
         const result = id

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Download, RotateCcw, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CertificateStatusBadge } from "@/components/common/page";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,16 @@ export function CertificateReportClient({
     from: filters.from ?? "",
     to: filters.to ?? "",
   });
+
+  useEffect(() => {
+    setFilterState({
+      q: filters.q ?? "",
+      trangThai: filters.trangThai ?? "all",
+      phongBan: filters.phongBan ?? "",
+      from: filters.from ?? "",
+      to: filters.to ?? "",
+    });
+  }, [filters.q, filters.trangThai, filters.phongBan, filters.from, filters.to]);
 
   function applyFilters(next: ReportFilters) {
     const params = new URLSearchParams();

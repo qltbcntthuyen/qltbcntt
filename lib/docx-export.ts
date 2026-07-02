@@ -196,7 +196,9 @@ function buildBody(mode: ExportMode, rows: CertificateReportRow[], config: Certi
           row.so_hieu_chung_thu_so ?? "",
           row.email ?? "",
           row.so_hieu_thiet_bi ?? "",
-          row.da_gia_han ? "Thay đổi thông tin / cấp mới" : "Gia hạn / thay đổi thông tin",
+          row.chung_thu_goc_id != null
+            ? "Thay đổi thông tin / cấp mới"
+            : "Gia hạn / thay đổi thông tin",
           row.thong_tin_chung ?? "",
           `${formatDate(row.ngay_hieu_luc)} - ${formatDate(row.ngay_het_hieu_luc)}`,
         ])

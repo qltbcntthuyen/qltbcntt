@@ -1,10 +1,9 @@
 "use client";
 
-import { Download, FileSpreadsheet, Search, ShieldAlert, Users } from "lucide-react";
+import { Download, FileSpreadsheet, ShieldAlert, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { NHOM_CDS_LABELS, NHOM_CDS_OPTIONS } from "@/lib/constants";
@@ -319,7 +318,7 @@ export function DeviceReportClient({
   return (
     <div className="space-y-4">
       <p className="text-sm text-slate-600">
-        Chọn báo cáo cần xuất. Mỗi báo cáo đều xuất Excel theo dữ liệu đang được lọc trên trang Thiết bị.
+        Chọn báo cáo cần xuất. Mỗi báo cáo xuất Excel theo toàn bộ thiết bị hiện có trong hệ thống.
         Đảm bảo đã đánh dấu cờ “Đáp ứng CĐS” và phân “Nhóm CĐS” cho thiết bị trước khi xuất báo cáo 1.1.
       </p>
 
@@ -347,37 +346,18 @@ export function DeviceReportClient({
           title="1.4 Thống kê thiết bị theo người sử dụng"
           description="Chọn nhân sự để xuất báo cáo theo tên hoặc để trống để xuất toàn bộ."
           extra={
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  list="staff-options"
-                  value={staffFilter}
-                  onChange={(event) => setStaffFilter(event.target.value)}
-                  placeholder="Chọn hoặc bỏ trống để xuất tất cả"
-                  className="pl-9"
-                />
-                <datalist id="staff-options">
-                  {staff.map((item) => (
-                    <option key={item.id} value={String(item.id)}>
-                      {item.ho_ten}
-                    </option>
-                  ))}
-                </datalist>
-              </div>
-              <Select
-                value={staffFilter}
-                onChange={(event) => setStaffFilter(event.target.value)}
-                aria-label="Chọn nhân sự"
-              >
-                <option value="">Toàn bộ</option>
-                {staff.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.ho_ten}
-                  </option>
-                ))}
-              </Select>
-            </div>
+            <Select
+              value={staffFilter}
+              onChange={(event) => setStaffFilter(event.target.value)}
+              aria-label="Chọn nhân sự"
+            >
+              <option value="">Toàn bộ nhân sự</option>
+              {staff.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.ho_ten}
+                </option>
+              ))}
+            </Select>
           }
           onClick={exportByUser}
         />

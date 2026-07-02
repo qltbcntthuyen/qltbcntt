@@ -19,6 +19,16 @@ export async function GET(request: Request) {
     .map((value) => Number(value.trim()))
     .filter((value) => Number.isFinite(value) && value > 0);
 
+  // Trạng thái mặc định theo từng mẫu khi không truyền ids:
+  // - dang_su_dung: CTS đang hiệu lực hoặc sắp hết hạn
+  // - mẫu 04 (đề nghị gia hạn/đổi thông tin): sắp hết hạn hoặc đã hết hạn
+  // - mẫu 05 (đề nghị thu hồi): cần thu hồi
+  const defaultStatuses: Record<typeof mode, string[]> = {
+    dang_su_dung: ["dang_hieu_luc", "sap_het_han"],
+    "04": ["sap_het_han", "het_han"],
+    "05": ["can_thu_hoi"],
+  };
+
   const supabase = await createClient();
   const [rowsResult, configResult] = await Promise.all([
     ids.length
@@ -30,7 +40,7 @@ export async function GET(request: Request) {
       : supabase
           .from("v_bao_cao_chung_thu_so")
           .select("*")
-          .in("trang_thai", ["dang_hieu_luc", "sap_het_han"])
+          .in("trang_thai", defaultStatuses[mode])
           .order("so_hieu_thiet_bi"),
     supabase
       .from("cau_hinh_van_ban_chung_thu_so")
@@ -45,7 +55,7 @@ export async function GET(request: Request) {
   }
 
   let rows = rowsResult.data ?? [];
-  if (mode === "dang_su_dung") {
+  if (ids.length && mode === "dang_su_dung") {
     rows = rows.filter(
       (row) => row.trang_thai === "dang_hieu_luc" || row.trang_thai === "sap_het_han"
     );

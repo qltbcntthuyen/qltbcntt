@@ -148,6 +148,12 @@ function toInputDate(value: unknown) {
   return String(value);
 }
 
+function localDateTimeInputValue(date = new Date()) {
+  // datetime-local cần giờ địa phương, không dùng trực tiếp toISOString (UTC)
+  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return shifted.toISOString().slice(0, 16);
+}
+
 function suggestRenewStartDate(endDate: unknown) {
   const normalized = toInputDate(endDate);
   if (!normalized) return "";
@@ -220,6 +226,14 @@ export function CertificateListClient({
     }
     return map;
   }, [records]);
+  const statusByRecordId = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const row of rows) {
+      const recordId = toNumberOrNull(row.thiet_bi_chung_thu_so_id);
+      if (recordId != null && row.trang_thai) map.set(recordId, row.trang_thai);
+    }
+    return map;
+  }, [rows]);
   const historyByRecord = useMemo(() => {
     const map = new Map<number, CertificateHistory[]>();
     for (const item of history) {
@@ -285,6 +299,17 @@ export function CertificateListClient({
     [rows, safePage, pageSize]
   );
   const baseIndex = pageSize > 0 ? (safePage - 1) * pageSize : 0;
+
+  useEffect(() => {
+    setFilterState({
+      q: filters.q ?? "",
+      trangThai: filters.trangThai ?? "all",
+      phongBan: filters.phongBan ?? "",
+      hieuLucFrom: filters.hieuLucFrom ?? "",
+      hieuLucTo: filters.hieuLucTo ?? "",
+    });
+    setPage(1);
+  }, [filters.q, filters.trangThai, filters.phongBan, filters.hieuLucFrom, filters.hieuLucTo]);
 
   function applyFilters(next: CertificateFilters) {
     const params = new URLSearchParams();
@@ -447,11 +472,14 @@ export function CertificateListClient({
       return;
     }
 
+    // Chuyển giờ địa phương sang ISO tại trình duyệt để server không hiểu nhầm múi giờ
+    const revokeAtIso = revokeAt ? new Date(revokeAt).toISOString() : "";
+
     runTransitionAction(startTransition, async () => {
       const result = await revokeCertificateAction({
         id,
         ly_do_thu_hoi: revokeReason,
-        thoi_diem_thu_hoi: revokeAt,
+        thoi_diem_thu_hoi: revokeAtIso,
       });
       setMessage(result.message);
       if (result.ok) {
@@ -604,6 +632,14 @@ export function CertificateListClient({
   const currentDetailHistory = detailRecordId ? historyByRecord.get(detailRecordId) ?? [] : [];
   const currentDeviceRecords =
     detailTarget?.thiet_bi_id != null ? currentRecordsByDevice.get(detailTarget.thiet_bi_id) ?? [] : [];
+
+  function recordStatus(record: Certificate): string {
+    const fromReport = statusByRecordId.get(Number(record.id));
+    if (fromReport) return fromReport;
+    if (record.thoi_diem_thu_hoi) return "da_thu_hoi";
+    if (record.da_gia_han) return "da_gia_han";
+    return record.la_hien_hanh ? "dang_hieu_luc" : "het_han";
+  }
 
   return (
     <div className="space-y-4">
@@ -814,7 +850,7 @@ export function CertificateListClient({
                             closeOverlayPanels();
                             setRevokeMessage(null);
                             setRevokeTarget(row);
-                            setRevokeAt(new Date().toISOString().slice(0, 16));
+                            setRevokeAt(localDateTimeInputValue());
                           }}
                           disabled={row.trang_thai === "da_thu_hoi"}
                         >
@@ -1163,15 +1199,7 @@ export function CertificateListClient({
                           {record.la_hien_hanh ? "Hiện hành" : "Đã thay thế"}
                         </p>
                       </div>
-                      <CertificateStatusBadge
-                        status={
-                          record.la_hien_hanh
-                            ? detailTarget.trang_thai
-                            : record.da_gia_han
-                              ? "da_gia_han"
-                              : "het_han"
-                        }
-                      />
+                      <CertificateStatusBadge status={recordStatus(record)} />
                     </div>
                   </div>
                 ))}

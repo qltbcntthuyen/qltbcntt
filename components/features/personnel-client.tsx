@@ -152,7 +152,10 @@ export function PersonnelClient({
       const result = await deletePersonAction(deleteTarget.id);
       setMessage(result.message);
       setDeleteTarget(null);
-      if (result.ok) router.refresh();
+      if (result.ok) {
+        setSelectedPerson(null);
+        router.refresh();
+      }
     });
   }
 
